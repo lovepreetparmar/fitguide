@@ -6,6 +6,7 @@ import {
   type TouchableOpacityProps,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { Platform } from 'react-native';
 import { cn } from '@/utils/cn';
 
 interface ButtonProps extends TouchableOpacityProps {
@@ -58,7 +59,9 @@ export function Button({
   ...props
 }: ButtonProps) {
   const handlePress = (e: Parameters<NonNullable<TouchableOpacityProps['onPress']>>[0]) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     onPress?.(e);
   };
 

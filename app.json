@@ -29,7 +29,15 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "output": "single",
+      "name": "Fit Guide",
+      "shortName": "Fit Guide",
+      "description": "AI-powered personal fitness coach. Train smarter. Lift better.",
+      "themeColor": "#090909",
+      "backgroundColor": "#090909",
+      "display": "standalone",
+      "lang": "en"
     },
     "plugins": [
       "expo-router",

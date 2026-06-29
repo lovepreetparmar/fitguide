@@ -1,20 +1,33 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
+import { WebShell } from '@/components/layout/WebShell';
 
-export default function TabsLayout() {
+const tabScreens = [
+  { name: 'index', title: 'Home', icon: 'home' as const },
+  { name: 'workout', title: 'Workout', icon: 'barbell' as const },
+  { name: 'exercises', title: 'Exercises', icon: 'list' as const },
+  { name: 'progress', title: 'Progress', icon: 'trending-up' as const },
+  { name: 'profile', title: 'Profile', icon: 'person' as const },
+];
+
+function TabNavigator() {
+  const isWeb = Platform.OS === 'web';
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#161616',
-          borderTopColor: '#2A2A2A',
-          borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 88 : 64,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 8,
-          paddingTop: 8,
-        },
+        tabBarStyle: isWeb
+          ? { display: 'none' }
+          : {
+              backgroundColor: '#161616',
+              borderTopColor: '#2A2A2A',
+              borderTopWidth: 1,
+              height: Platform.OS === 'ios' ? 88 : 64,
+              paddingBottom: Platform.OS === 'ios' ? 28 : 8,
+              paddingTop: 8,
+            },
         tabBarActiveTintColor: '#6C63FF',
         tabBarInactiveTintColor: '#666666',
         tabBarLabelStyle: {
@@ -23,51 +36,32 @@ export default function TabsLayout() {
         },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="workout"
-        options={{
-          title: 'Workout',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="barbell" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="exercises"
-        options={{
-          title: 'Exercises',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="progress"
-        options={{
-          title: 'Progress',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="trending-up" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
-          ),
-        }}
-      />
+      {tabScreens.map((screen) => (
+        <Tabs.Screen
+          key={screen.name}
+          name={screen.name}
+          options={{
+            title: screen.title,
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name={screen.icon} size={size} color={color} />
+            ),
+          }}
+        />
+      ))}
     </Tabs>
   );
+}
+
+export default function TabsLayout() {
+  if (Platform.OS === 'web') {
+    return (
+      <WebShell>
+        <View className="flex-1">
+          <TabNavigator />
+        </View>
+      </WebShell>
+    );
+  }
+
+  return <TabNavigator />;
 }

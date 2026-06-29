@@ -1,3 +1,24 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Web-first global styles */
+html,
+body,
+#root {
+  height: 100%;
+  background-color: #090909;
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Smooth scrolling on web */
+@media (min-width: 768px) {
+  * {
+    scroll-behavior: smooth;
+  }
+}

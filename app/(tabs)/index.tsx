@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { StatCard } from '@/components/ui/StatCard';
+import { WebContainer } from '@/components/layout/WebContainer';
 import { AIRecommendationCard } from '@/components/home/AIRecommendationCard';
 import { RecoveryScore } from '@/components/home/RecoveryScore';
 import { TodaysWorkoutCard } from '@/components/home/TodaysWorkoutCard';
@@ -81,12 +82,13 @@ export default function HomeScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="px-5 pb-8"
+        contentContainerClassName="pb-8"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6C63FF" />
         }
         showsVerticalScrollIndicator={false}
       >
+        <WebContainer>
         <View className="mb-6 flex-row items-center justify-between pt-2">
           <View>
             <Text className="text-sm text-text-secondary">{getGreeting()}</Text>
@@ -203,6 +205,7 @@ export default function HomeScreen() {
           size="lg"
           icon={<Ionicons name="flash" size={20} color="#FFFFFF" />}
         />
+        </WebContainer>
       </ScrollView>
     </SafeAreaView>
   );

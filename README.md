@@ -2,104 +2,96 @@
 
 **Train Smarter. Lift Better.**
 
-AI-powered personal fitness coach built with React Native, Expo, and Supabase.
+AI-powered personal fitness coach — **web app first**, with a clear path to iOS/Android later.
+
+## Web-First
+
+Fit Guide runs in the browser as the primary platform. The same Expo/React Native codebase converts to native mobile apps when you're ready — no rewrite required.
+
+```bash
+npm install
+npm run dev          # Opens in browser (default)
+npm run build:web    # Production static build → dist/
+```
+
+See [docs/WEB_TO_MOBILE.md](docs/WEB_TO_MOBILE.md) for the mobile conversion guide.
 
 ## Features
 
 - **AI Workout Generator** — Personalized workouts based on goals, equipment, and recovery
-- **Exercise Library** — 12+ exercises with instructions, tips, and muscle targeting
-- **Workout Player** — Real-time set tracking with rest timers
-- **Recovery Tracking** — Per-muscle recovery scores and status
-- **Progress Charts** — Weight, body fat, and volume trends
-- **AI Coach** — Context-aware recommendations and weekly summaries
-- **Interactive Body Map** — Tap muscles to filter exercises
-- **Nutrition Tracking** — Macro and water intake monitoring
-- **Achievements** — Streaks, milestones, and personal records
-- **Offline Support** — Cached workouts with sync when online
+- **Exercise Library** — Searchable library with interactive body map
+- **Workout Player** — Set tracking with rest timers
+- **Recovery Tracking** — Per-muscle recovery scores
+- **Progress Charts** — Weight and body composition trends
+- **AI Coach** — Context-aware training recommendations
+- **Nutrition** — Macro tracking and meal suggestions
+
+## Layout
+
+| Screen size | Navigation |
+|-------------|------------|
+| Desktop (≥768px) | Sidebar |
+| Mobile web | Bottom tabs |
+| Native app (later) | Bottom tabs |
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React Native, Expo, TypeScript |
-| Routing | Expo Router |
+| Web | Expo Web + React Native Web |
+| Mobile (later) | Same codebase via EAS Build |
 | Styling | NativeWind (Tailwind CSS) |
-| State | Zustand |
-| Data Fetching | React Query |
-| Forms | React Hook Form + Zod |
-| Backend | Supabase (Auth, Database, Storage) |
-| Charts | Victory Native |
-| 3D | React Three Fiber, SVG Body Map |
+| State | Zustand + React Query |
+| Backend | Supabase (optional — guest mode works offline) |
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
-- Expo CLI (`npx expo`)
-- Supabase account (optional — app works in demo/guest mode)
+- Supabase account (optional)
 
-### Installation
+### Development
 
 ```bash
 npm install
-cp .env.example .env
-# Add your Supabase credentials to .env
-npm start
+cp .env.example .env   # Optional Supabase credentials
+npm run dev            # Web dev server
 ```
 
-### Database Setup
+### Production Web Build
 
-Run the migration in your Supabase SQL Editor:
-
-```
-database/migrations/001_initial_schema.sql
-```
-
-## Project Structure
-
-```
-app/                    # Expo Router screens
-  (auth)/               # Authentication & onboarding
-  (tabs)/               # Main tab navigation
-  exercise/             # Exercise detail
-  workout/              # Workout player
-src/
-  components/           # Reusable UI components
-  constants/            # App constants & sample data
-  hooks/                # Custom React hooks
-  providers/            # Context providers
-  services/             # API & business logic
-  store/                # Zustand stores
-  types/                # TypeScript types
-  utils/                # Utility functions
-  ai/                   # AI coach logic
-  3d/                   # 3D body components
-database/               # SQL migrations
+```bash
+npm run build:web
+npm run preview:web    # Preview dist/ locally
 ```
 
-## Design System
+Deploy `dist/` to Vercel, Netlify, or Cloudflare Pages.
 
-| Token | Value |
-|-------|-------|
-| Background | `#090909` |
-| Cards | `#161616` |
-| Primary | `#6C63FF` |
-| Secondary | `#00D9A5` |
-| Error | `#FF5252` |
-| Warning | `#FFC107` |
-| Border Radius | `20px` |
+### Mobile (Later)
+
+```bash
+npm run start:mobile   # Expo dev for iOS/Android
+eas build --platform all
+```
+
+## Database
+
+Run `database/migrations/001_initial_schema.sql` in Supabase SQL Editor.
 
 ## Scripts
 
-```bash
-npm start          # Start Expo dev server
-npm run android    # Run on Android
-npm run ios        # Run on iOS
-npm run web        # Run on web
-npm test           # Run tests
-npm run typecheck  # TypeScript check
-```
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Web development (default) |
+| `npm run build:web` | Static web export |
+| `npm run start:mobile` | Mobile development |
+| `npm test` | Unit tests |
+| `npm run typecheck` | TypeScript check |
+
+## Design
+
+Dark theme — `#090909` background, `#6C63FF` primary, `#00D9A5` secondary, 20px card radius.
 
 ## License
 

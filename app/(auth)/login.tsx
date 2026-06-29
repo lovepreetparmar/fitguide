@@ -15,8 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { AuthWebLayout } from '@/components/layout/AuthWebLayout';
 import { useAuthStore } from '@/store/authStore';
-import { APP_NAME } from '@/constants/app';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -51,19 +51,16 @@ export default function LoginScreen() {
     router.replace('/');
   };
 
-  return (
-    <SafeAreaView className="flex-1 bg-background">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1"
-      >
-        <ScrollView
-          contentContainerClassName="flex-grow px-6 py-8"
-          keyboardShouldPersistTaps="handled"
-        >
-          <TouchableOpacity onPress={() => router.back()} className="mb-8">
-            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
+  const form = (
+    <ScrollView
+      contentContainerClassName="flex-grow"
+      keyboardShouldPersistTaps="handled"
+    >
+      {Platform.OS !== 'web' && (
+        <TouchableOpacity onPress={() => router.back()} className="mb-8">
+          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
 
           <Text className="mb-2 text-3xl font-bold text-text">Welcome back</Text>
           <Text className="mb-8 text-base text-text-secondary">
@@ -161,7 +158,20 @@ export default function LoginScreen() {
               <Text className="text-sm font-semibold text-primary">Sign Up</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
+    </ScrollView>
+  );
+
+  if (Platform.OS === 'web') {
+    return <AuthWebLayout>{form}</AuthWebLayout>;
+  }
+
+  return (
+    <SafeAreaView className="flex-1 bg-background">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        className="flex-1"
+      >
+        <View className="flex-1 px-6 py-8">{form}</View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, Image } from 'react-native';
+import { View, Text, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, {
   useSharedValue,
@@ -49,7 +49,9 @@ export default function SplashScreen() {
     <View className="flex-1 bg-background">
       <LinearGradient
         colors={['#090909', '#161616', '#090909']}
-        className="flex-1 items-center justify-center px-8"
+        className={`flex-1 items-center justify-center px-8 ${
+          Platform.OS === 'web' ? 'min-h-screen' : ''
+        }`}
       >
         <Animated.View style={logoStyle} className="mb-8 items-center">
           <View className="mb-6 h-24 w-24 items-center justify-center rounded-3xl bg-primary">
@@ -64,7 +66,7 @@ export default function SplashScreen() {
           </Text>
         </Animated.View>
 
-        <Animated.View style={buttonsStyle} className="w-full">
+        <Animated.View style={buttonsStyle} className="w-full max-w-md">
           <Button
             title="Get Started"
             onPress={() => router.push('/(auth)/register')}
