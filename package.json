@@ -63,7 +63,9 @@
     "prebuild:ios": "sh -c '. ./scripts/native-env.sh && expo prebuild --platform ios'",
     "test": "jest",
     "test:watch": "jest --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "link-media": "node scripts/link-exercise-media.mjs > database/seed_exercise_media.sql",
+    "download-media": "node scripts/download-exercise-media.mjs"
   },
   "private": true
 }

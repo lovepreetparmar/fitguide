@@ -7,6 +7,7 @@ import * as Haptics from 'expo-haptics';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { ProgressBar } from '@/components/ui/ProgressBar';
+import { ExerciseDemoPlayer } from '@/components/exercise/ExerciseDemoPlayer';
 import { useWorkoutStore, getCurrentExerciseSets } from '@/store/workoutStore';
 import { useAppStore } from '@/store/appStore';
 import { useAuthStore } from '@/store/authStore';
@@ -146,16 +147,26 @@ export default function WorkoutPlayerScreen() {
     const nextSetTotal = pendingExerciseAdvance
       ? getCurrentExerciseSets(activeSession, currentExerciseIndex + 1)?.sets.length ?? 0
       : currentExercise.sets.length;
+    const nextExercise = pendingExerciseAdvance
+      ? activeSession.sets.find((s) => s.exercise_id === exerciseIds[currentExerciseIndex + 1])?.exercise
+      : exercise;
 
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-background">
-        <Text className="mb-2 text-sm uppercase tracking-wider text-text-secondary">Rest</Text>
-        <Text className="mb-8 text-7xl font-bold text-primary">{formatTime(restTimeRemaining)}</Text>
-        <Text className="mb-2 text-lg text-text">Next: {nextExerciseName}</Text>
-        <Text className="mb-8 text-text-secondary">
-          Set {nextSetNumber} of {nextSetTotal}
-        </Text>
-        <Button title="Skip Rest" variant="outline" onPress={endRest} />
+      <SafeAreaView className="flex-1 bg-background">
+        <View className="flex-1 items-center justify-center px-5">
+          <Text className="mb-2 text-sm uppercase tracking-wider text-text-secondary">Rest</Text>
+          <Text className="mb-4 text-7xl font-bold text-primary">{formatTime(restTimeRemaining)}</Text>
+          {nextExercise && (
+            <View className="mb-6 w-full overflow-hidden rounded-card">
+              <ExerciseDemoPlayer exercise={nextExercise} height={200} />
+            </View>
+          )}
+          <Text className="mb-2 text-lg text-text">Next: {nextExerciseName}</Text>
+          <Text className="mb-8 text-text-secondary">
+            Set {nextSetNumber} of {nextSetTotal}
+          </Text>
+          <Button title="Skip Rest" variant="outline" onPress={endRest} />
+        </View>
       </SafeAreaView>
     );
   }
@@ -174,11 +185,16 @@ export default function WorkoutPlayerScreen() {
 
       <ProgressBar progress={progress} height={4} color="#6C63FF" className="px-5" />
 
-      <View className="flex-1 items-center justify-center px-5">
+      <View className="flex-1 px-5">
+        <View className="mb-4 overflow-hidden rounded-card">
+          {exercise && <ExerciseDemoPlayer exercise={exercise} height={180} />}
+        </View>
+
+        <View className="flex-1 items-center justify-center">
         <Text className="mb-2 text-sm uppercase tracking-wider text-primary">
           Set {currentSet.set_number} of {currentExercise.sets.length}
         </Text>
-        <Text className="mb-8 text-center text-3xl font-bold text-text">{exercise?.name}</Text>
+        <Text className="mb-6 text-center text-3xl font-bold text-text">{exercise?.name}</Text>
 
         <View className="mb-8 w-full flex-row justify-center gap-8">
           <View className="items-center">
@@ -235,6 +251,7 @@ export default function WorkoutPlayerScreen() {
           fullWidth
           icon={<Ionicons name="checkmark" size={22} color="#FFFFFF" />}
         />
+        </View>
       </View>
 
       {currentExerciseIndex < totalExercises - 1 && (
