@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# self-hosted exercise GIFs (upload to Hostinger separately)
+/hostinger-upload/
