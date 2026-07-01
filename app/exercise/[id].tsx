@@ -1,30 +1,37 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
-import { ProgressBar } from '@/components/ui/ProgressBar';
 import { exerciseService } from '@/services/exercises';
+import { workoutService } from '@/services/workout';
 import { aiCoachService } from '@/services/ai';
 import { MUSCLE_GROUPS } from '@/constants/app';
+import { useAuthStore } from '@/store/authStore';
 import { useLocalSearchParams } from 'expo-router';
 
 export default function ExerciseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { profile } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'instructions' | 'tips' | 'history'>('instructions');
 
-  const { data: exercise, isLoading } = useQuery({
+  const { data: exercise, isLoading, isError } = useQuery({
     queryKey: ['exercise', id],
     queryFn: () => exerciseService.getExerciseById(id!),
     enabled: !!id,
   });
 
-  if (isLoading || !exercise) {
+  const { data: history = [] } = useQuery({
+    queryKey: ['exercise-history', profile?.user_id, id],
+    queryFn: () => workoutService.getExerciseHistory(profile?.user_id ?? '', id!),
+    enabled: !!profile && !!id,
+  });
+
+  if (isLoading) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-background">
         <Text className="text-text-secondary">Loading...</Text>
@@ -32,7 +39,21 @@ export default function ExerciseDetailScreen() {
     );
   }
 
-  const muscleColor = MUSCLE_GROUPS.find((m) => m.id === exercise.primary_muscle)?.color ?? '#6C63FF';
+  if (isError || !exercise) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-background px-5">
+        <Text className="mb-4 text-lg font-semibold text-text">Exercise not found</Text>
+        <TouchableOpacity onPress={() => router.back()} className="rounded-button bg-primary px-6 py-3">
+          <Text className="font-semibold text-white">Go Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  const muscle = MUSCLE_GROUPS.find((m) => m.id === exercise.primary_muscle);
+  const muscleColor = muscle?.color ?? '#6C63FF';
+  const muscleLabel = muscle?.label ?? exercise.primary_muscle;
+  const hasMedia = Boolean(exercise.model_url || exercise.video_url || exercise.thumbnail_url);
   const aiTip = aiCoachService.generateExerciseRecommendation(exercise.name, 60, 10, 10);
 
   return (
@@ -42,6 +63,8 @@ export default function ExerciseDetailScreen() {
           <TouchableOpacity
             onPress={() => router.back()}
             className="absolute left-4 top-4 z-10 h-10 w-10 items-center justify-center rounded-full bg-background/80"
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
           >
             <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
           </TouchableOpacity>
@@ -52,17 +75,20 @@ export default function ExerciseDetailScreen() {
           >
             <Ionicons name="barbell" size={64} color={muscleColor} />
           </View>
-          <Text className="mt-2 text-xs text-text-muted">3D model available</Text>
+          {hasMedia && (
+            <Text className="mt-2 text-xs text-text-muted">3D model available</Text>
+          )}
         </View>
 
         <View className="px-5 pt-5">
           <Text className="mb-2 text-2xl font-bold text-text">{exercise.name}</Text>
 
           <View className="mb-4 flex-row flex-wrap gap-2">
-            <Chip label={exercise.primary_muscle} color={muscleColor} selected />
-            {exercise.secondary_muscles.map((m) => (
-              <Chip key={m} label={m} size="sm" />
-            ))}
+            <Chip label={muscleLabel} color={muscleColor} selected />
+            {exercise.secondary_muscles.map((m) => {
+              const secondary = MUSCLE_GROUPS.find((g) => g.id === m);
+              return <Chip key={m} label={secondary?.label ?? m} size="sm" />;
+            })}
             <Chip label={exercise.difficulty} size="sm" />
           </View>
 
@@ -129,7 +155,27 @@ export default function ExerciseDetailScreen() {
           {activeTab === 'history' && (
             <Card className="mb-4">
               <Text className="mb-3 text-base font-semibold text-text">Previous Performance</Text>
-              <Text className="text-sm text-text-secondary">No history yet. Complete a workout to see your progress.</Text>
+              {history.length === 0 ? (
+                <Text className="text-sm text-text-secondary">
+                  No history yet. Complete a workout to see your progress.
+                </Text>
+              ) : (
+                history.slice(0, 10).map((entry) => (
+                  <View
+                    key={`${entry.sessionId}-${entry.set.id}`}
+                    className="mb-3 border-b border-border pb-3"
+                  >
+                    <Text className="text-sm font-medium text-text">{entry.sessionName}</Text>
+                    <Text className="text-xs text-text-muted">
+                      {new Date(entry.date).toLocaleDateString()} · Set {entry.set.set_number}
+                    </Text>
+                    <Text className="mt-1 text-sm text-text-secondary">
+                      {entry.set.reps} reps
+                      {entry.set.weight_kg ? ` @ ${entry.set.weight_kg}kg` : ''}
+                    </Text>
+                  </View>
+                ))
+              )}
             </Card>
           )}
         </View>

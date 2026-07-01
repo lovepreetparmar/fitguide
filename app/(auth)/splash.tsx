@@ -1,96 +1,62 @@
 import React, { useEffect } from 'react';
-import { View, Text, Image } from 'react-native';
+import { View, Text } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   withDelay,
-  withSequence,
+  withSpring,
   Easing,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { APP_NAME, APP_TAGLINE } from '@/constants/app';
+import { APP_NAME } from '@/constants/app';
 import { Button } from '@/components/ui/Button';
-import { useAuthStore } from '@/store/authStore';
 
 export default function SplashScreen() {
   const router = useRouter();
-  const signInAsGuest = useAuthStore((s) => s.signInAsGuest);
-  const logoScale = useSharedValue(0.5);
-  const logoOpacity = useSharedValue(0);
-  const textOpacity = useSharedValue(0);
-  const buttonsOpacity = useSharedValue(0);
+
+  const contentOpacity = useSharedValue(0);
+  const contentTranslateY = useSharedValue(20);
 
   useEffect(() => {
-    logoOpacity.value = withTiming(1, { duration: 800 });
-    logoScale.value = withSequence(
-      withTiming(1.1, { duration: 600, easing: Easing.out(Easing.back(1.5)) }),
-      withTiming(1, { duration: 200 })
-    );
-    textOpacity.value = withDelay(400, withTiming(1, { duration: 600 }));
-    buttonsOpacity.value = withDelay(800, withTiming(1, { duration: 600 }));
+    contentOpacity.value = withDelay(150, withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) }));
+    contentTranslateY.value = withDelay(150, withSpring(0, { damping: 18, stiffness: 120 }));
   }, []);
 
-  const logoStyle = useAnimatedStyle(() => ({
-    opacity: logoOpacity.value,
-    transform: [{ scale: logoScale.value }],
-  }));
-
-  const textStyle = useAnimatedStyle(() => ({
-    opacity: textOpacity.value,
-  }));
-
-  const buttonsStyle = useAnimatedStyle(() => ({
-    opacity: buttonsOpacity.value,
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity: contentOpacity.value,
+    transform: [{ translateY: contentTranslateY.value }],
   }));
 
   return (
     <View className="flex-1 bg-background">
       <LinearGradient
-        colors={['#090909', '#161616', '#090909']}
-        className="flex-1 items-center justify-center px-8"
-      >
-        <Animated.View style={logoStyle} className="mb-8 items-center">
-          <View className="mb-6 h-24 w-24 items-center justify-center rounded-3xl bg-primary">
-            <Text className="text-4xl font-bold text-white">FG</Text>
-          </View>
-          <Text className="text-4xl font-bold text-text">{APP_NAME}</Text>
-        </Animated.View>
+        colors={['#0D0B1A', '#090909', '#090909']}
+        locations={[0, 0.5, 1]}
+        className="absolute inset-0"
+      />
 
-        <Animated.View style={textStyle} className="mb-16 items-center">
-          <Text className="text-center text-lg leading-7 text-text-secondary">
-            {APP_TAGLINE}
-          </Text>
-        </Animated.View>
+      <SafeAreaView className="flex-1" edges={['top', 'bottom']}>
+        <View className="flex-1 items-center justify-center px-8">
+          <Animated.View style={contentStyle} className="w-full max-w-sm items-center">
+            <Text className="mb-2 text-center text-4xl font-bold tracking-tight text-text">
+              {APP_NAME}
+            </Text>
+            <Text className="mb-10 text-center text-base text-text-secondary">
+              Train smarter. Lift better.
+            </Text>
 
-        <Animated.View style={buttonsStyle} className="w-full">
-          <Button
-            title="Get Started"
-            onPress={() => router.push('/(auth)/register')}
-            fullWidth
-            size="lg"
-            className="mb-3"
-          />
-          <Button
-            title="Sign In"
-            variant="outline"
-            onPress={() => router.push('/(auth)/login')}
-            fullWidth
-            size="lg"
-            className="mb-3"
-          />
-          <Button
-            title="Continue as Guest"
-            variant="ghost"
-            onPress={() => {
-              signInAsGuest();
-              router.replace('/');
-            }}
-            fullWidth
-          />
-        </Animated.View>
-      </LinearGradient>
+            <Button
+              title="Sign In"
+              onPress={() => router.push('/(auth)/login')}
+              fullWidth
+              size="lg"
+            />
+          </Animated.View>
+        </View>
+      </SafeAreaView>
     </View>
   );
 }

@@ -1,55 +1,28 @@
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabase } from './supabase';
 import type { NutritionLog, WaterLog } from '@/types';
 
 export const nutritionService = {
   async getTodayLog(userId: string): Promise<NutritionLog | null> {
     const today = new Date().toISOString().split('T')[0];
 
-    if (!isSupabaseConfigured) {
-      return {
-        id: 'local_nutrition',
-        user_id: userId,
-        date: today,
-        calories: 1850,
-        protein_g: 145,
-        carbs_g: 180,
-        fat_g: 62,
-        fiber_g: 28,
-        water_ml: 2100,
-      };
-    }
-
     const { data, error } = await supabase
       .from('nutrition_logs')
       .select('*')
       .eq('user_id', userId)
       .eq('date', today)
-      .single();
+      .maybeSingle();
 
     if (error) return null;
-    return data as NutritionLog;
+    return data as NutritionLog | null;
   },
 
   async logNutrition(userId: string, log: Partial<NutritionLog>): Promise<NutritionLog> {
     const today = new Date().toISOString().split('T')[0];
     const entry = { user_id: userId, date: today, ...log };
 
-    if (!isSupabaseConfigured) {
-      return {
-        id: `nutrition_${Date.now()}`,
-        calories: 0,
-        protein_g: 0,
-        carbs_g: 0,
-        fat_g: 0,
-        fiber_g: 0,
-        water_ml: 0,
-        ...entry,
-      } as NutritionLog;
-    }
-
     const { data, error } = await supabase
       .from('nutrition_logs')
-      .upsert(entry)
+      .upsert(entry, { onConflict: 'user_id,date' })
       .select()
       .single();
 
@@ -63,10 +36,6 @@ export const nutritionService = {
       amount_ml: amountMl,
       logged_at: new Date().toISOString(),
     };
-
-    if (!isSupabaseConfigured) {
-      return { ...entry, id: `water_${Date.now()}` };
-    }
 
     const { data, error } = await supabase.from('water_logs').insert(entry).select().single();
     if (error) throw error;

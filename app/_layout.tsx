@@ -25,7 +25,6 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="exercise/[id]" options={{ presentation: 'card' }} />
             <Stack.Screen name="workout/player" options={{ presentation: 'fullScreenModal' }} />
-            <Stack.Screen name="workout/generate" options={{ presentation: 'modal' }} />
           </Stack>
         </AuthProvider>
       </QueryProvider>

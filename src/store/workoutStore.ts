@@ -8,14 +8,15 @@ interface WorkoutStore {
   currentSetIndex: number;
   isResting: boolean;
   restTimeRemaining: number;
+  pendingExerciseAdvance: boolean;
   isPlaying: boolean;
 
   setCurrentPlan: (plan: WorkoutPlan | null) => void;
   startSession: (session: WorkoutSession) => void;
-  completeSet: (setId: string, reps: number, weight: number) => void;
+  completeSet: (setId: string, reps: number, weight: number, advance?: boolean) => void;
   nextExercise: () => void;
   previousExercise: () => void;
-  startRest: (seconds: number) => void;
+  startRest: (seconds: number, advanceExercise?: boolean) => void;
   tickRest: () => void;
   endRest: () => void;
   finishWorkout: () => WorkoutSession | null;
@@ -29,6 +30,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   currentSetIndex: 0,
   isResting: false,
   restTimeRemaining: 0,
+  pendingExerciseAdvance: false,
   isPlaying: false,
 
   setCurrentPlan: (plan) => set({ currentPlan: plan }),
@@ -42,8 +44,8 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       isResting: false,
     }),
 
-  completeSet: (setId, reps, weight) => {
-    const { activeSession } = get();
+  completeSet: (setId, reps, weight, advance = true) => {
+    const { activeSession, currentSetIndex } = get();
     if (!activeSession) return;
 
     const updatedSets = activeSession.sets.map((s) =>
@@ -52,7 +54,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
     set({
       activeSession: { ...activeSession, sets: updatedSets },
-      currentSetIndex: get().currentSetIndex + 1,
+      ...(advance ? { currentSetIndex: currentSetIndex + 1 } : {}),
     });
   },
 
@@ -73,18 +75,28 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     }
   },
 
-  startRest: (seconds) => set({ isResting: true, restTimeRemaining: seconds }),
+  startRest: (seconds, advanceExercise = false) =>
+    set({ isResting: true, restTimeRemaining: seconds, pendingExerciseAdvance: advanceExercise }),
 
   tickRest: () => {
-    const { restTimeRemaining } = get();
+    const { restTimeRemaining, pendingExerciseAdvance } = get();
     if (restTimeRemaining <= 1) {
-      set({ isResting: false, restTimeRemaining: 0 });
+      if (pendingExerciseAdvance) {
+        get().nextExercise();
+      }
+      set({ isResting: false, restTimeRemaining: 0, pendingExerciseAdvance: false });
     } else {
       set({ restTimeRemaining: restTimeRemaining - 1 });
     }
   },
 
-  endRest: () => set({ isResting: false, restTimeRemaining: 0 }),
+  endRest: () => {
+    const { pendingExerciseAdvance } = get();
+    if (pendingExerciseAdvance) {
+      get().nextExercise();
+    }
+    set({ isResting: false, restTimeRemaining: 0, pendingExerciseAdvance: false });
+  },
 
   finishWorkout: () => {
     const { activeSession } = get();
@@ -117,6 +129,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       currentSetIndex: 0,
       isResting: false,
       restTimeRemaining: 0,
+      pendingExerciseAdvance: false,
       isPlaying: false,
     }),
 }));

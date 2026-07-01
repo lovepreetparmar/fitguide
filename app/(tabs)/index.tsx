@@ -1,9 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, ScrollView, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { StatCard } from '@/components/ui/StatCard';
 import { AIRecommendationCard } from '@/components/home/AIRecommendationCard';
@@ -13,20 +13,38 @@ import { NutritionCard } from '@/components/home/NutritionCard';
 import { useAuthStore } from '@/store/authStore';
 import { useAppStore } from '@/store/appStore';
 import { useWorkoutStore } from '@/store/workoutStore';
-import { recoveryService } from '@/services/progress';
+import { recoveryService, progressService } from '@/services/progress';
 import { aiCoachService } from '@/services/ai';
 import { workoutService } from '@/services/workout';
 import { nutritionService } from '@/services/nutrition';
 import { getGreeting } from '@/utils/format';
-import type { WorkoutPlan } from '@/types';
+
+function getWorkoutsThisWeek(sessions: { completed_at: string | null }[]): number {
+  const now = new Date();
+  const day = now.getDay();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+  startOfWeek.setHours(0, 0, 0, 0);
+
+  return sessions.filter(
+    (s) => s.completed_at && new Date(s.completed_at) >= startOfWeek
+  ).length;
+}
 
 export default function HomeScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { profile } = useAuthStore();
-  const { streak, waterIntakeMl, achievements } = useAppStore();
+  const { streak, achievements } = useAppStore();
   const { currentPlan, setCurrentPlan } = useWorkoutStore();
   const [generating, setGenerating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const { data: recentSessions = [] } = useQuery({
+    queryKey: ['workout-sessions', profile?.user_id],
+    queryFn: () => workoutService.getRecentSessions(profile?.user_id ?? ''),
+    enabled: !!profile,
+  });
 
   const { data: recovery = [] } = useQuery({
     queryKey: ['recovery', profile?.user_id],
@@ -40,20 +58,43 @@ export default function HomeScreen() {
     enabled: !!profile,
   });
 
-  const recoveryScore = recoveryService.getOverallRecoveryScore(recovery);
-
-  const recommendations = aiCoachService.generateRecommendations({
-    profile: profile!,
-    recovery,
-    recentWorkouts: [],
-    streak,
+  const { data: progress = [] } = useQuery({
+    queryKey: ['progress', profile?.user_id, 'month'],
+    queryFn: () => progressService.getProgress(profile?.user_id ?? '', 'month'),
+    enabled: !!profile,
   });
+
+  const recoveryScore = recoveryService.getOverallRecoveryScore(recovery);
+  const latestProgress = progress[progress.length - 1];
+  const previousProgress = progress[progress.length - 2];
+  const workoutsThisWeek = useMemo(() => getWorkoutsThisWeek(recentSessions), [recentSessions]);
+  const weeklyTarget = profile?.workout_days ?? 4;
+  const weeklyProgress = Math.min(100, (workoutsThisWeek / weeklyTarget) * 100);
+
+  const weightTrend =
+    latestProgress?.weight_kg != null && previousProgress?.weight_kg != null
+      ? latestProgress.weight_kg - previousProgress.weight_kg
+      : null;
+
+  const recommendations = useMemo(
+    () =>
+      aiCoachService.generateRecommendations({
+        profile,
+        recovery,
+        recentWorkouts: recentSessions,
+        streak,
+      }),
+    [profile, recovery, recentSessions, streak]
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await new Promise((r) => setTimeout(r, 1000));
+    await queryClient.invalidateQueries({ queryKey: ['recovery'] });
+    await queryClient.invalidateQueries({ queryKey: ['nutrition'] });
+    await queryClient.invalidateQueries({ queryKey: ['progress'] });
+    await queryClient.invalidateQueries({ queryKey: ['workout-sessions'] });
     setRefreshing(false);
-  }, []);
+  }, [queryClient]);
 
   const handleGenerateWorkout = async () => {
     if (!profile) return;
@@ -114,15 +155,27 @@ export default function HomeScreen() {
           <View className="flex-1 justify-between gap-3">
             <StatCard
               label="Weight"
-              value={profile?.weight_kg ?? 0}
+              value={latestProgress?.weight_kg ?? profile?.weight_kg ?? 0}
               unit="kg"
               icon="scale-outline"
-              trend="down"
-              trendValue="0.5kg"
+              trend={
+                weightTrend === null
+                  ? undefined
+                  : weightTrend < 0
+                    ? 'down'
+                    : weightTrend > 0
+                      ? 'up'
+                      : undefined
+              }
+              trendValue={
+                weightTrend !== null
+                  ? `${Math.abs(weightTrend).toFixed(1)}kg`
+                  : undefined
+              }
             />
             <StatCard
               label="Water"
-              value={waterIntakeMl}
+              value={nutrition?.water_ml ?? 0}
               unit="ml"
               icon="water-outline"
               iconColor="#45B7D1"
@@ -130,24 +183,13 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View className="mb-4 flex-row gap-3">
+        <View className="mb-4">
           <StatCard
             label="Calories"
-            value="1,850"
+            value={nutrition?.calories?.toLocaleString() ?? '0'}
             unit="kcal"
             icon="flame-outline"
             iconColor="#FF5252"
-            className="flex-1"
-          />
-          <StatCard
-            label="Body Fat"
-            value="18.2"
-            unit="%"
-            icon="body-outline"
-            iconColor="#00D9A5"
-            trend="down"
-            trendValue="0.3%"
-            className="flex-1"
           />
         </View>
 
@@ -168,14 +210,16 @@ export default function HomeScreen() {
           <View className="rounded-card bg-card p-4">
             <View className="mb-2 flex-row items-center justify-between">
               <Text className="text-sm text-text-secondary">
-                {profile?.workout_days ?? 4} workouts per week
+                {weeklyTarget} workouts per week
               </Text>
-              <Text className="text-sm font-semibold text-primary">2 / {profile?.workout_days ?? 4}</Text>
+              <Text className="text-sm font-semibold text-primary">
+                {workoutsThisWeek} / {weeklyTarget}
+              </Text>
             </View>
             <View className="h-2 overflow-hidden rounded-full bg-border">
               <View
                 className="h-full rounded-full bg-primary"
-                style={{ width: `${(2 / (profile?.workout_days ?? 4)) * 100}%` }}
+                style={{ width: `${weeklyProgress}%` }}
               />
             </View>
           </View>

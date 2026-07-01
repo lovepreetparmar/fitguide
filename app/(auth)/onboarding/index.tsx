@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInRight, FadeOutLeft } from 'react-native-reanimated';
@@ -77,26 +77,35 @@ export default function OnboardingScreen() {
   const handleNext = async () => {
     if (step < STEPS.length - 1) {
       setStep(step + 1);
-    } else {
-      setLoading(true);
-      const data = {
-        name,
-        age: parseInt(age, 10),
-        height_cm: parseInt(height, 10),
-        weight_kg: parseFloat(weight),
-        gender: gender!,
-        goal: goal!,
-        experience: experience!,
-        workout_days: workoutDays,
-        workout_time_minutes: parseInt(workoutTime, 10),
-        equipment,
-        medical_limitations: medical,
-        previous_injuries: injuries,
-      };
+      return;
+    }
+
+    const data = {
+      name,
+      age: parseInt(age, 10),
+      height_cm: parseInt(height, 10),
+      weight_kg: parseFloat(weight),
+      gender: gender!,
+      goal: goal!,
+      experience: experience!,
+      workout_days: workoutDays,
+      workout_time_minutes: parseInt(workoutTime, 10),
+      equipment,
+      medical_limitations: medical,
+      previous_injuries: injuries,
+    };
+
+    setLoading(true);
+    try {
       setOnboardingData(data);
-      await completeOnboarding();
-      setLoading(false);
+      await completeOnboarding(data);
       router.replace('/');
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Could not save your profile. Please try again.';
+      Alert.alert('Setup failed', message);
+    } finally {
+      setLoading(false);
     }
   };
 

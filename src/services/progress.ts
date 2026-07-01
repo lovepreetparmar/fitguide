@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabase } from './supabase';
 import type { MuscleGroup, ProgressEntry, RecoveryData, RecoveryStatus } from '@/types';
 import { MUSCLE_GROUPS } from '@/constants/app';
 
@@ -9,29 +9,67 @@ const RECOVERY_THRESHOLDS = {
 
 export const recoveryService = {
   async getRecoveryData(userId: string): Promise<RecoveryData[]> {
-    if (!isSupabaseConfigured) {
-      return this.generateDefaultRecovery();
-    }
-
     const { data, error } = await supabase
       .from('recovery')
       .select('*')
       .eq('user_id', userId);
 
-    if (error || !data?.length) {
-      return this.generateDefaultRecovery();
+    if (error) {
+      if (error.code === '42P01' || error.code === 'PGRST205') return [];
+      throw error;
+    }
+
+    if (!data?.length) {
+      await this.initializeForUser(userId);
+      const { data: seeded } = await supabase
+        .from('recovery')
+        .select('*')
+        .eq('user_id', userId);
+      return (seeded as RecoveryData[]) ?? [];
     }
 
     return data as RecoveryData[];
   },
 
+  async initializeForUser(userId: string): Promise<void> {
+    const rows = MUSCLE_GROUPS.map((muscle) => ({
+      user_id: userId,
+      muscle_group: muscle.id,
+      status: 'recovered' as RecoveryStatus,
+      score: 85,
+      last_trained_at: null,
+      volume_last_7_days: 0,
+      updated_at: new Date().toISOString(),
+    }));
+
+    const { error } = await supabase.from('recovery').upsert(rows, {
+      onConflict: 'user_id,muscle_group',
+    });
+    if (error && error.code !== '42P01' && error.code !== 'PGRST205') throw error;
+  },
+
   generateDefaultRecovery(): RecoveryData[] {
+    const baseScores: Record<string, number> = {
+      chest: 91,
+      back: 85,
+      shoulders: 85,
+      triceps: 91,
+      biceps: 98,
+      forearms: 90,
+      abs: 88,
+      obliques: 87,
+      glutes: 86,
+      quadriceps: 84,
+      hamstrings: 83,
+      calves: 92,
+    };
+
     return MUSCLE_GROUPS.map((muscle) => ({
       id: `recovery_${muscle.id}`,
       user_id: 'local',
       muscle_group: muscle.id as MuscleGroup,
       status: 'recovered' as RecoveryStatus,
-      score: 85 + Math.floor(Math.random() * 15),
+      score: baseScores[muscle.id] ?? 85,
       last_trained_at: null,
       volume_last_7_days: 0,
       updated_at: new Date().toISOString(),
@@ -67,8 +105,6 @@ export const recoveryService = {
     userId: string,
     muscleVolumes: Record<MuscleGroup, number>
   ): Promise<void> {
-    if (!isSupabaseConfigured) return;
-
     const updates = Object.entries(muscleVolumes).map(([muscle, volume]) => {
       const { score, status } = this.calculateRecoveryScore(
         new Date().toISOString(),
@@ -86,7 +122,10 @@ export const recoveryService = {
       };
     });
 
-    await supabase.from('recovery').upsert(updates);
+    const { error } = await supabase.from('recovery').upsert(updates, {
+      onConflict: 'user_id,muscle_group',
+    });
+    if (error) throw error;
   },
 
   getOverallRecoveryScore(recovery: RecoveryData[]): number {
@@ -106,10 +145,6 @@ export const recoveryService = {
 
 export const progressService = {
   async getProgress(userId: string, period: 'week' | 'month' | 'year' = 'month'): Promise<ProgressEntry[]> {
-    if (!isSupabaseConfigured) {
-      return this.generateSampleProgress(period);
-    }
-
     const days = period === 'week' ? 7 : period === 'month' ? 30 : 365;
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
@@ -121,45 +156,12 @@ export const progressService = {
       .gte('date', startDate.toISOString().split('T')[0])
       .order('date', { ascending: true });
 
-    if (error) return this.generateSampleProgress(period);
+    if (error) return [];
     return (data as ProgressEntry[]) ?? [];
-  },
-
-  generateSampleProgress(period: 'week' | 'month' | 'year'): ProgressEntry[] {
-    const days = period === 'week' ? 7 : period === 'month' ? 30 : 12;
-    const entries: ProgressEntry[] = [];
-    const baseWeight = 75;
-
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date();
-      if (period === 'year') {
-        date.setMonth(date.getMonth() - i);
-      } else {
-        date.setDate(date.getDate() - i);
-      }
-
-      entries.push({
-        id: `progress_${i}`,
-        user_id: 'local',
-        date: date.toISOString().split('T')[0],
-        weight_kg: baseWeight + (days - i) * 0.05 + (Math.random() - 0.5) * 0.5,
-        body_fat_percent: 18 - (days - i) * 0.02 + (Math.random() - 0.5) * 0.3,
-        muscle_mass_kg: 35 + (days - i) * 0.03,
-        calories: 2000 + Math.floor(Math.random() * 500),
-        workout_volume_kg: Math.floor(Math.random() * 5000) + 2000,
-        notes: null,
-      });
-    }
-
-    return entries;
   },
 
   async logProgress(userId: string, entry: Omit<ProgressEntry, 'id' | 'user_id'>): Promise<ProgressEntry> {
     const newEntry = { ...entry, user_id: userId };
-
-    if (!isSupabaseConfigured) {
-      return { ...newEntry, id: `progress_${Date.now()}` };
-    }
 
     const { data, error } = await supabase.from('progress').insert(newEntry).select().single();
     if (error) throw error;
@@ -167,8 +169,6 @@ export const progressService = {
   },
 
   async getMeasurements(userId: string) {
-    if (!isSupabaseConfigured) return [];
-
     const { data, error } = await supabase
       .from('measurements')
       .select('*')

@@ -8,6 +8,7 @@ import type {
   User,
 } from '@/types';
 import { authService, profileService } from '@/services/auth';
+import { recoveryService } from '@/services/progress';
 import { isSupabaseConfigured } from '@/services/supabase';
 
 interface AuthStore extends AuthState {
@@ -18,9 +19,11 @@ interface AuthStore extends AuthState {
   setOnboardingData: (data: Partial<OnboardingData>) => void;
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  signInWithApple: () => Promise<void>;
   signOut: () => Promise<void>;
   signInAsGuest: () => void;
-  completeOnboarding: () => Promise<void>;
+  completeOnboarding: (data?: OnboardingData) => Promise<void>;
   initialize: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
 }
@@ -120,6 +123,50 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
+      signInWithGoogle: async () => {
+        set({ isLoading: true });
+        try {
+          const user = await authService.signInWithGoogle();
+          if (!user) throw new Error('Could not complete Google sign in');
+          const profile = await profileService.getProfile(user.id);
+          const displayName = profile ? undefined : await authService.getOAuthDisplayName();
+          set((state) => ({
+            user,
+            profile,
+            isAuthenticated: true,
+            isGuest: false,
+            rememberMe: true,
+            onboardingData: displayName
+              ? { ...state.onboardingData, name: displayName }
+              : state.onboardingData,
+          }));
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      signInWithApple: async () => {
+        set({ isLoading: true });
+        try {
+          const user = await authService.signInWithApple();
+          if (!user) throw new Error('Could not complete Apple sign in');
+          const profile = await profileService.getProfile(user.id);
+          const displayName = profile ? undefined : await authService.getOAuthDisplayName();
+          set((state) => ({
+            user,
+            profile,
+            isAuthenticated: true,
+            isGuest: false,
+            rememberMe: true,
+            onboardingData: displayName
+              ? { ...state.onboardingData, name: displayName }
+              : state.onboardingData,
+          }));
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
       signOut: async () => {
         if (isSupabaseConfigured) {
           await authService.signOut();
@@ -143,35 +190,39 @@ export const useAuthStore = create<AuthStore>()(
         });
       },
 
-      completeOnboarding: async () => {
+      completeOnboarding: async (data) => {
         const { user, onboardingData } = get();
-        if (!user) return;
+        if (!user) throw new Error('You must be signed in to continue.');
 
-        const fullData = onboardingData as OnboardingData;
+        const fullData = data ?? (onboardingData as OnboardingData);
+        set({ onboardingData: fullData });
+
         if (isSupabaseConfigured) {
-          const profile = await profileService.createProfile(user.id, fullData);
+          const profile = await profileService.saveProfile(user.id, fullData);
+          await recoveryService.initializeForUser(user.id);
           set({ profile });
-        } else {
-          set({
-            profile: {
-              ...GUEST_PROFILE,
-              user_id: user.id,
-              name: fullData.name,
-              age: fullData.age,
-              height_cm: fullData.height_cm,
-              weight_kg: fullData.weight_kg,
-              gender: fullData.gender,
-              goal: fullData.goal,
-              experience: fullData.experience,
-              workout_days: fullData.workout_days,
-              workout_time_minutes: fullData.workout_time_minutes,
-              equipment: fullData.equipment,
-              medical_limitations: fullData.medical_limitations,
-              previous_injuries: fullData.previous_injuries,
-              onboarding_completed: true,
-            },
-          });
+          return;
         }
+
+        set({
+          profile: {
+            ...GUEST_PROFILE,
+            user_id: user.id,
+            name: fullData.name,
+            age: fullData.age,
+            height_cm: fullData.height_cm,
+            weight_kg: fullData.weight_kg,
+            gender: fullData.gender,
+            goal: fullData.goal,
+            experience: fullData.experience,
+            workout_days: fullData.workout_days,
+            workout_time_minutes: fullData.workout_time_minutes,
+            equipment: fullData.equipment,
+            medical_limitations: fullData.medical_limitations || null,
+            previous_injuries: fullData.previous_injuries || null,
+            onboarding_completed: true,
+          },
+        });
       },
 
       initialize: async () => {
@@ -212,10 +263,10 @@ export const useAuthStore = create<AuthStore>()(
       name: 'fitguide-auth',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
-        user: state.rememberMe ? state.user : null,
-        profile: state.rememberMe ? state.profile : null,
-        isAuthenticated: state.rememberMe ? state.isAuthenticated : false,
-        isGuest: state.rememberMe ? state.isGuest : false,
+        user: state.isGuest || state.rememberMe ? state.user : null,
+        profile: state.isGuest || state.rememberMe ? state.profile : null,
+        isAuthenticated: state.isGuest || state.rememberMe ? state.isAuthenticated : false,
+        isGuest: state.isGuest,
         rememberMe: state.rememberMe,
         onboardingData: state.onboardingData,
       }),

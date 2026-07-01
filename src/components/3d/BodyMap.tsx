@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
-import Svg, { Ellipse, Rect, Circle } from 'react-native-svg';
+import { View, Text, TouchableOpacity } from 'react-native';
+import Svg, { Ellipse, Rect } from 'react-native-svg';
 import { MUSCLE_GROUPS } from '@/constants/app';
 import type { MuscleGroup } from '@/types';
 
@@ -25,6 +25,9 @@ const MUSCLE_POSITIONS: Record<string, { x: number; y: number; w: number; h: num
   hamstrings: { x: 55, y: 165, w: 35, h: 40 },
 };
 
+const MAP_WIDTH = 200;
+const MAP_HEIGHT = 280;
+
 export function BodyMap({ onMusclePress, selectedMuscle, view = 'front' }: BodyMapProps) {
   const [activeView, setActiveView] = useState(view);
 
@@ -38,19 +41,23 @@ export function BodyMap({ onMusclePress, selectedMuscle, view = 'front' }: BodyM
         <TouchableOpacity
           onPress={() => setActiveView('front')}
           className={`rounded-full px-4 py-2 ${activeView === 'front' ? 'bg-primary' : 'bg-card'}`}
+          accessibilityRole="button"
+          accessibilityLabel="Front view"
         >
           <Text className={activeView === 'front' ? 'text-white' : 'text-text-secondary'}>Front</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => setActiveView('back')}
           className={`rounded-full px-4 py-2 ${activeView === 'back' ? 'bg-primary' : 'bg-card'}`}
+          accessibilityRole="button"
+          accessibilityLabel="Back view"
         >
           <Text className={activeView === 'back' ? 'text-white' : 'text-text-secondary'}>Back</Text>
         </TouchableOpacity>
       </View>
 
-      <View className="relative">
-        <Svg width={200} height={280} viewBox="0 0 200 280">
+      <View className="relative" style={{ width: MAP_WIDTH, height: MAP_HEIGHT }}>
+        <Svg width={MAP_WIDTH} height={MAP_HEIGHT} viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}>
           <Ellipse cx="100" cy="25" rx="22" ry="25" fill="#2A2A2A" />
           <Rect x="70" y="48" width="60" height="80" rx="10" fill="#2A2A2A" />
           <Rect x="25" y="50" width="20" height="70" rx="8" fill="#2A2A2A" />
@@ -75,17 +82,38 @@ export function BodyMap({ onMusclePress, selectedMuscle, view = 'front' }: BodyM
                 fill={isSelected ? (muscle?.color ?? '#6C63FF') : `${muscle?.color ?? '#6C63FF'}60`}
                 stroke={isSelected ? '#FFFFFF' : 'transparent'}
                 strokeWidth={2}
-                onPress={() => onMusclePress(muscleId as MuscleGroup)}
               />
             );
           })}
         </Svg>
+
+        {visibleMuscles.map((muscleId) => {
+          const pos = MUSCLE_POSITIONS[muscleId];
+          if (!pos) return null;
+          const muscle = MUSCLE_GROUPS.find((m) => m.id === muscleId);
+
+          return (
+            <TouchableOpacity
+              key={`touch-${muscleId}`}
+              onPress={() => onMusclePress(muscleId as MuscleGroup)}
+              accessibilityRole="button"
+              accessibilityLabel={`${muscle?.label ?? muscleId} muscle`}
+              style={{
+                position: 'absolute',
+                left: pos.x,
+                top: pos.y,
+                width: pos.w,
+                height: pos.h,
+              }}
+            />
+          );
+        })}
       </View>
 
       {selectedMuscle && (
         <View className="mt-4 rounded-card bg-card px-4 py-2">
           <Text className="text-center text-sm font-semibold capitalize text-primary">
-            {selectedMuscle}
+            {MUSCLE_GROUPS.find((m) => m.id === selectedMuscle)?.label ?? selectedMuscle}
           </Text>
         </View>
       )}

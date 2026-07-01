@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useAuthStore } from '@/store/authStore';
@@ -18,7 +17,7 @@ export default function Index() {
     return <Redirect href="/(auth)/splash" />;
   }
 
-  if (!profile?.onboarding_completed) {
+  if (!profile || !profile.onboarding_completed) {
     return <Redirect href="/(auth)/onboarding" />;
   }
 

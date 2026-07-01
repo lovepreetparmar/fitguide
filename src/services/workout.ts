@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabase } from './supabase';
 import type {
   Difficulty,
   Exercise,
@@ -9,7 +9,7 @@ import type {
   WorkoutSession,
   WorkoutSet,
 } from '@/types';
-import { SAMPLE_EXERCISES } from '@/constants/exercises';
+import { exerciseService } from './exercises';
 
 interface GenerateWorkoutParams {
   profile: Profile;
@@ -24,114 +24,132 @@ export const workoutService = {
     const exercises = await this.selectExercises(profile, recovery, workoutLengthMinutes);
     const workoutExercises = this.buildWorkoutExercises(exercises, profile);
 
-    const plan: WorkoutPlan = {
-      id: `plan_${Date.now()}`,
-      user_id: profile.user_id,
-      name: this.generateWorkoutName(profile),
-      description: `AI-generated ${workoutLengthMinutes}-minute workout`,
+    const { data, error } = await supabase
+      .from('workout_plans')
+      .insert({
+        user_id: profile.user_id,
+        name: this.generateWorkoutName(profile),
+        description: `AI-generated ${workoutLengthMinutes}-minute workout`,
+        exercises: workoutExercises,
+        estimated_duration_minutes: workoutLengthMinutes,
+        difficulty: profile.experience ?? 'intermediate',
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return {
+      ...(data as WorkoutPlan),
       exercises: workoutExercises,
-      estimated_duration_minutes: workoutLengthMinutes,
-      difficulty: profile.experience ?? 'intermediate',
-      created_at: new Date().toISOString(),
     };
-
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase.from('workout_plans').insert(plan).select().single();
-      if (!error && data) return data as WorkoutPlan;
-    }
-
-    return plan;
   },
 
   async startSession(userId: string, plan: WorkoutPlan): Promise<WorkoutSession> {
-    const session: WorkoutSession = {
-      id: `session_${Date.now()}`,
+    const { data: sessionRow, error: sessionError } = await supabase
+      .from('workout_sessions')
+      .insert({
+        user_id: userId,
+        plan_id: plan.id,
+        name: plan.name,
+        started_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (sessionError) throw sessionError;
+
+    const sessionId = sessionRow.id as string;
+    const setsPayload = plan.exercises.flatMap((ex, exIndex) =>
+      Array.from({ length: ex.sets }, (_, setIndex) => ({
+        session_id: sessionId,
+        exercise_id: ex.exercise_id,
+        set_number: setIndex + 1,
+        reps: typeof ex.reps === 'number' ? ex.reps : 10,
+        weight_kg: ex.weight_kg,
+        completed: false,
+        rpe: null,
+        notes: null,
+      }))
+    );
+
+    const { data: setRows, error: setsError } = await supabase
+      .from('workout_sets')
+      .insert(setsPayload)
+      .select();
+
+    if (setsError) throw setsError;
+
+    const exerciseById = new Map(plan.exercises.map((ex) => [ex.exercise_id, ex.exercise]));
+
+    const sets: WorkoutSet[] = (setRows ?? []).map((row) => ({
+      id: row.id,
+      session_id: row.session_id,
+      exercise_id: row.exercise_id,
+      exercise: exerciseById.get(row.exercise_id),
+      set_number: row.set_number,
+      reps: row.reps,
+      weight_kg: row.weight_kg,
+      completed: row.completed,
+      rpe: row.rpe,
+      notes: row.notes,
+    }));
+
+    return {
+      id: sessionId,
       user_id: userId,
       plan_id: plan.id,
       name: plan.name,
-      started_at: new Date().toISOString(),
+      started_at: sessionRow.started_at,
       completed_at: null,
       duration_minutes: null,
       calories_burned: null,
       notes: null,
-      sets: plan.exercises.flatMap((ex, exIndex) =>
-        Array.from({ length: ex.sets }, (_, setIndex) => ({
-          id: `set_${Date.now()}_${exIndex}_${setIndex}`,
-          session_id: `session_${Date.now()}`,
-          exercise_id: ex.exercise_id,
-          exercise: ex.exercise,
-          set_number: setIndex + 1,
-          reps: typeof ex.reps === 'number' ? ex.reps : 10,
-          weight_kg: ex.weight_kg,
-          completed: false,
-          rpe: null,
-          notes: null,
-        }))
-      ),
+      sets,
     };
-
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase.from('workout_sessions').insert({
-        user_id: session.user_id,
-        plan_id: session.plan_id,
-        name: session.name,
-        started_at: session.started_at,
-      }).select().single();
-      if (!error && data) {
-        session.id = data.id;
-      }
-    }
-
-    return session;
   },
 
-  async completeSession(sessionId: string, sets: WorkoutSet[]): Promise<WorkoutSession> {
+  async completeSession(
+    sessionId: string,
+    sets: WorkoutSet[],
+    startedAt?: string
+  ): Promise<WorkoutSession> {
     const completedSets = sets.filter((s) => s.completed);
     const totalVolume = completedSets.reduce(
       (sum, s) => sum + (s.weight_kg ?? 0) * s.reps,
       0
     );
 
+    const startTime = startedAt ? new Date(startedAt).getTime() : Date.now();
     const updates = {
       completed_at: new Date().toISOString(),
-      duration_minutes: Math.round(
-        (Date.now() - new Date(sets[0]?.session_id ? Date.now() : Date.now()).getTime()) / 60000
-      ),
+      duration_minutes: Math.max(1, Math.round((Date.now() - startTime) / 60000)),
       calories_burned: Math.round(totalVolume * 0.05),
     };
 
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('workout_sessions')
-        .update(updates)
-        .eq('id', sessionId)
-        .select()
-        .single();
-      if (!error && data) return { ...data, sets } as WorkoutSession;
+    const { data, error } = await supabase
+      .from('workout_sessions')
+      .update(updates)
+      .eq('id', sessionId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    for (const set of completedSets) {
+      await this.saveSet(set);
     }
 
-    return {
-      id: sessionId,
-      user_id: '',
-      plan_id: null,
-      name: 'Workout',
-      started_at: new Date().toISOString(),
-      completed_at: updates.completed_at,
-      duration_minutes: updates.duration_minutes,
-      calories_burned: updates.calories_burned,
-      notes: null,
-      sets,
-    };
+    return { ...(data as WorkoutSession), sets };
   },
 
-  async getRecentSessions(userId: string, limit = 5): Promise<WorkoutSession[]> {
-    if (!isSupabaseConfigured) return [];
-
+  async getRecentSessions(userId: string, limit = 20): Promise<WorkoutSession[]> {
     const { data, error } = await supabase
       .from('workout_sessions')
       .select('*')
       .eq('user_id', userId)
-      .order('started_at', { ascending: false })
+      .not('completed_at', 'is', null)
+      .order('completed_at', { ascending: false })
       .limit(limit);
 
     if (error) return [];
@@ -139,9 +157,7 @@ export const workoutService = {
   },
 
   async saveSet(set: WorkoutSet): Promise<void> {
-    if (!isSupabaseConfigured) return;
-
-    await supabase.from('workout_sets').upsert({
+    const { error } = await supabase.from('workout_sets').upsert({
       id: set.id,
       session_id: set.session_id,
       exercise_id: set.exercise_id,
@@ -152,25 +168,29 @@ export const workoutService = {
       rpe: set.rpe,
       notes: set.notes,
     });
+
+    if (error) throw error;
   },
 
-  selectExercises(
+  async selectExercises(
     profile: Profile,
     recovery: RecoveryData[],
     durationMinutes: number
-  ): Exercise[] {
+  ): Promise<Exercise[]> {
+    const allExercises = await exerciseService.getExercises();
+
     const fatiguedMuscles = new Set(
       recovery.filter((r) => r.status === 'needs_rest').map((r) => r.muscle_group)
     );
 
-    let available = SAMPLE_EXERCISES.filter((ex) => {
+    let available = allExercises.filter((ex) => {
       const hasEquipment = ex.equipment.some((eq) => profile.equipment.includes(eq));
       const muscleRecovered = !fatiguedMuscles.has(ex.primary_muscle);
       return hasEquipment && muscleRecovered;
     });
 
     if (available.length < 4) {
-      available = SAMPLE_EXERCISES.filter((ex) =>
+      available = allExercises.filter((ex) =>
         ex.equipment.some((eq) => profile.equipment.includes(eq))
       );
     }
@@ -201,6 +221,35 @@ export const workoutService = {
     }
 
     return selected;
+  },
+
+  async getExerciseHistory(userId: string, exerciseId: string) {
+    const { data, error } = await supabase
+      .from('workout_sets')
+      .select('*, workout_sessions!inner(id, name, completed_at, started_at, user_id)')
+      .eq('exercise_id', exerciseId)
+      .eq('completed', true)
+      .eq('workout_sessions.user_id', userId)
+      .order('set_number', { ascending: true });
+
+    if (error) return [];
+
+    return (data ?? []).map((row) => ({
+      sessionId: row.workout_sessions.id,
+      sessionName: row.workout_sessions.name,
+      date: row.workout_sessions.completed_at ?? row.workout_sessions.started_at,
+      set: {
+        id: row.id,
+        session_id: row.session_id,
+        exercise_id: row.exercise_id,
+        set_number: row.set_number,
+        reps: row.reps,
+        weight_kg: row.weight_kg,
+        completed: row.completed,
+        rpe: row.rpe,
+        notes: row.notes,
+      },
+    }));
   },
 
   buildWorkoutExercises(exercises: Exercise[], profile: Profile): WorkoutExercise[] {

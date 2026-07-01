@@ -11,7 +11,7 @@ import { FITNESS_GOALS, EXPERIENCE_LEVELS } from '@/constants/app';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { profile, signOut, isGuest } = useAuthStore();
+  const { profile, signOut } = useAuthStore();
   const { streak, achievements } = useAppStore();
 
   const handleSignOut = () => {
@@ -28,16 +28,20 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const handleMenuPress = (label: string) => {
+    Alert.alert(label, 'This feature is coming soon.');
+  };
+
   const goalLabel = FITNESS_GOALS.find((g) => g.id === profile?.goal)?.label ?? 'Not set';
   const experienceLabel = EXPERIENCE_LEVELS.find((e) => e.id === profile?.experience)?.label ?? 'Not set';
 
   const menuItems = [
-    { icon: 'body-outline' as const, label: 'Body Measurements', route: null },
-    { icon: 'nutrition-outline' as const, label: 'Nutrition', route: null },
-    { icon: 'notifications-outline' as const, label: 'Notifications', route: null },
-    { icon: 'settings-outline' as const, label: 'Settings', route: null },
-    { icon: 'download-outline' as const, label: 'Export Data', route: null },
-    { icon: 'shield-outline' as const, label: 'Privacy', route: null },
+    { icon: 'body-outline' as const, label: 'Body Measurements' },
+    { icon: 'nutrition-outline' as const, label: 'Nutrition' },
+    { icon: 'notifications-outline' as const, label: 'Notifications' },
+    { icon: 'settings-outline' as const, label: 'Settings' },
+    { icon: 'download-outline' as const, label: 'Export Data' },
+    { icon: 'shield-outline' as const, label: 'Privacy' },
   ];
 
   return (
@@ -52,11 +56,6 @@ export default function ProfileScreen() {
             </Text>
           </View>
           <Text className="text-xl font-bold text-text">{profile?.name ?? 'Athlete'}</Text>
-          {isGuest && (
-            <View className="mt-2 rounded-full bg-warning/20 px-3 py-1">
-              <Text className="text-xs font-medium text-warning">Guest Mode</Text>
-            </View>
-          )}
           <View className="mt-4 flex-row gap-6">
             <View className="items-center">
               <Text className="text-2xl font-bold text-text">{streak}</Text>
@@ -114,10 +113,13 @@ export default function ProfileScreen() {
           {menuItems.map((item, i) => (
             <TouchableOpacity
               key={item.label}
+              onPress={() => handleMenuPress(item.label)}
               className={`flex-row items-center px-4 py-4 ${
                 i < menuItems.length - 1 ? 'border-b border-border' : ''
               }`}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
             >
               <Ionicons name={item.icon} size={22} color="#A0A0A0" />
               <Text className="ml-4 flex-1 text-base text-text">{item.label}</Text>

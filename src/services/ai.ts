@@ -2,7 +2,7 @@ import type { AIRecommendation, Profile, RecoveryData, WorkoutSession } from '@/
 import { recoveryService } from './progress';
 
 interface CoachContext {
-  profile: Profile;
+  profile: Profile | null;
   recovery: RecoveryData[];
   recentWorkouts: WorkoutSession[];
   streak: number;
@@ -13,6 +13,8 @@ export const aiCoachService = {
   generateRecommendations(context: CoachContext): AIRecommendation[] {
     const recommendations: AIRecommendation[] = [];
     const { profile, recovery, recentWorkouts, streak } = context;
+
+    if (!profile) return recommendations;
 
     const overallRecovery = recoveryService.getOverallRecoveryScore(recovery);
 
@@ -107,6 +109,8 @@ export const aiCoachService = {
 
   generateWeeklySummary(context: CoachContext): string {
     const { recentWorkouts, streak, profile } = context;
+    if (!profile) return 'Complete your profile to get a weekly summary.';
+
     const workoutCount = recentWorkouts.length;
     const totalVolume = recentWorkouts.reduce((sum, w) => {
       return sum + (w.sets?.reduce((s, set) => s + (set.weight_kg ?? 0) * set.reps, 0) ?? 0);

@@ -1,6 +1,5 @@
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabase } from './supabase';
 import type { Exercise, ExerciseCategory, MuscleGroup } from '@/types';
-import { SAMPLE_EXERCISES } from '@/constants/exercises';
 
 export const exerciseService = {
   async getExercises(filters?: {
@@ -9,10 +8,6 @@ export const exerciseService = {
     difficulty?: string;
     search?: string;
   }): Promise<Exercise[]> {
-    if (!isSupabaseConfigured) {
-      return filterLocalExercises(SAMPLE_EXERCISES, filters);
-    }
-
     let query = supabase.from('exercises').select('*').order('name');
 
     if (filters?.muscle) {
@@ -29,41 +24,32 @@ export const exerciseService = {
     }
 
     const { data, error } = await query;
-    if (error) throw error;
-    return (data as Exercise[]) ?? [];
+    if (error) {
+      throw new Error(
+        error.code === '42P01' || error.code === 'PGRST205'
+          ? 'Exercise library not set up. Run database/setup_supabase.sql in Supabase SQL Editor.'
+          : error.message
+      );
+    }
+    if (!data?.length) {
+      throw new Error('No exercises in database. Run database/setup_supabase.sql in Supabase SQL Editor.');
+    }
+    return data as Exercise[];
   },
 
   async getExerciseById(id: string): Promise<Exercise | null> {
-    if (!isSupabaseConfigured) {
-      return SAMPLE_EXERCISES.find((e) => e.id === id) ?? null;
-    }
-
-    const { data, error } = await supabase.from('exercises').select('*').eq('id', id).single();
+    const { data, error } = await supabase.from('exercises').select('*').eq('id', id).maybeSingle();
     if (error) return null;
-    return data as Exercise;
+    return data as Exercise | null;
   },
 
   async getExerciseBySlug(slug: string): Promise<Exercise | null> {
-    if (!isSupabaseConfigured) {
-      return SAMPLE_EXERCISES.find((e) => e.slug === slug) ?? null;
-    }
-
-    const { data, error } = await supabase.from('exercises').select('*').eq('slug', slug).single();
+    const { data, error } = await supabase.from('exercises').select('*').eq('slug', slug).maybeSingle();
     if (error) return null;
-    return data as Exercise;
+    return data as Exercise | null;
   },
 
   async getCategories(): Promise<ExerciseCategory[]> {
-    if (!isSupabaseConfigured) {
-      return [
-        { id: '1', name: 'Compound', slug: 'compound', icon: 'barbell' },
-        { id: '2', name: 'Isolation', slug: 'isolation', icon: 'fitness' },
-        { id: '3', name: 'Cardio', slug: 'cardio', icon: 'heart' },
-        { id: '4', name: 'Bodyweight', slug: 'bodyweight', icon: 'body' },
-        { id: '5', name: 'Stretching', slug: 'stretching', icon: 'expand' },
-      ];
-    }
-
     const { data, error } = await supabase.from('exercise_categories').select('*').order('name');
     if (error) throw error;
     return (data as ExerciseCategory[]) ?? [];
@@ -73,28 +59,3 @@ export const exerciseService = {
     return this.getExercises({ muscle });
   },
 };
-
-function filterLocalExercises(
-  exercises: Exercise[],
-  filters?: { muscle?: MuscleGroup; equipment?: string; difficulty?: string; search?: string }
-): Exercise[] {
-  let result = [...exercises];
-
-  if (filters?.muscle) {
-    result = result.filter(
-      (e) => e.primary_muscle === filters.muscle || e.secondary_muscles.includes(filters.muscle!)
-    );
-  }
-  if (filters?.equipment) {
-    result = result.filter((e) => e.equipment.includes(filters.equipment as Exercise['equipment'][number]));
-  }
-  if (filters?.difficulty) {
-    result = result.filter((e) => e.difficulty === filters.difficulty);
-  }
-  if (filters?.search) {
-    const search = filters.search.toLowerCase();
-    result = result.filter((e) => e.name.toLowerCase().includes(search));
-  }
-
-  return result;
-}

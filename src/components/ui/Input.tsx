@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, TextInput, Text, type TextInputProps } from 'react-native';
+import { View, TextInput, Text, Pressable, type TextInputProps } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { cn } from '@/utils/cn';
 
@@ -48,20 +48,27 @@ export function Input({
           {...props}
         />
         {secureTextEntry && (
-          <Ionicons
-            name={isSecure ? 'eye-off-outline' : 'eye-outline'}
-            size={20}
-            color="#666666"
+          <Pressable
             onPress={() => setIsSecure(!isSecure)}
-          />
+            accessibilityRole="button"
+            accessibilityLabel={isSecure ? 'Show password' : 'Hide password'}
+            hitSlop={8}
+          >
+            <Ionicons
+              name={isSecure ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color="#666666"
+            />
+          </Pressable>
         )}
         {rightIcon && !secureTextEntry && (
-          <Ionicons
-            name={rightIcon}
-            size={20}
-            color="#666666"
+          <Pressable
             onPress={onRightIconPress}
-          />
+            accessibilityRole="button"
+            hitSlop={8}
+          >
+            <Ionicons name={rightIcon} size={20} color="#666666" />
+          </Pressable>
         )}
       </View>
       {error && <Text className="mt-1 text-sm text-error">{error}</Text>}

@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
@@ -15,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useAuthStore } from '@/store/authStore';
+import { isSupabaseConfigured } from '@/services/supabase';
 
 const schema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -34,6 +36,14 @@ export default function ForgotPasswordScreen() {
   });
 
   const onSubmit = async (data: FormData) => {
+    if (!isSupabaseConfigured) {
+      Alert.alert(
+        'Unavailable',
+        'Password reset requires a connected Supabase account. Use guest mode or demo sign-in for now.'
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       await resetPassword(data.email);

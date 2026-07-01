@@ -40,8 +40,7 @@ export function RecoveryScore({ score, size = 120 }: RecoveryScoreProps) {
             fill="none"
             strokeDasharray={`${progress} ${circumference}`}
             strokeLinecap="round"
-            rotation="-90"
-            origin={`${size / 2}, ${size / 2}`}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
           />
         </Svg>
         <View className="absolute items-center">
