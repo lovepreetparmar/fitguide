@@ -1,15 +1,19 @@
+import { Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
-import { makeRedirectUri } from 'expo-auth-session';
 import { supabase, isSupabaseConfigured } from './supabase';
 import type { OnboardingData, Profile, User } from '@/types';
 
-WebBrowser.maybeCompleteAuthSession();
+if (Platform.OS === 'web') {
+  WebBrowser.maybeCompleteAuthSession();
+}
 
-const oauthRedirectTo = makeRedirectUri({
-  scheme: 'fitguide',
-  path: 'auth/callback',
-});
+// Use an explicit native deep link so Expo auth does not depend on manifest
+// resolution at runtime inside the dev client.
+const oauthRedirectTo =
+  Platform.OS === 'web'
+    ? `${window.location.origin}/auth/callback`
+    : 'fitguide://auth/callback';
 
 async function createSessionFromUrl(url: string) {
   const { params, errorCode } = QueryParams.getQueryParams(url);

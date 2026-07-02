@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, isSupabaseConfigured } from './supabase';
 import type { MuscleGroup, ProgressEntry, RecoveryData, RecoveryStatus } from '@/types';
 import { MUSCLE_GROUPS } from '@/constants/app';
 
@@ -144,17 +144,22 @@ export const recoveryService = {
 };
 
 export const progressService = {
-  async getProgress(userId: string, period: 'week' | 'month' | 'year' = 'month'): Promise<ProgressEntry[]> {
-    const days = period === 'week' ? 7 : period === 'month' ? 30 : 365;
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+  async getProgress(
+    userId: string,
+    period: 'week' | 'month' | 'year' | 'lifetime' = 'month'
+  ): Promise<ProgressEntry[]> {
+    const days =
+      period === 'week' ? 7 : period === 'month' ? 30 : period === 'year' ? 365 : null;
 
-    const { data, error } = await supabase
-      .from('progress')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('date', startDate.toISOString().split('T')[0])
-      .order('date', { ascending: true });
+    let query = supabase.from('progress').select('*').eq('user_id', userId);
+
+    if (days != null) {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      query = query.gte('date', startDate.toISOString().split('T')[0]);
+    }
+
+    const { data, error } = await query.order('date', { ascending: true });
 
     if (error) return [];
     return (data as ProgressEntry[]) ?? [];
@@ -178,5 +183,18 @@ export const progressService = {
 
     if (error) return [];
     return data ?? [];
+  },
+
+  async clearProgressData(userId: string): Promise<void> {
+    if (!userId || userId === 'guest' || !isSupabaseConfigured) return;
+
+    const tables = ['workout_sessions', 'workout_plans', 'progress', 'measurements'] as const;
+
+    for (const table of tables) {
+      const { error } = await supabase.from(table).delete().eq('user_id', userId);
+      if (error) throw error;
+    }
+
+    await recoveryService.initializeForUser(userId);
   },
 };

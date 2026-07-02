@@ -4,7 +4,7 @@
     "slug": "fit-guide",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/fitguide_logo.png",
     "userInterfaceStyle": "dark",
     "scheme": "fitguide",
     "splash": {
@@ -20,7 +20,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#090909",
-        "foregroundImage": "./assets/android-icon-foreground.png",
+        "foregroundImage": "./assets/fitguide_logo.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
@@ -39,7 +39,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
+          "icon": "./assets/fitguide_logo.png",
           "color": "#6C63FF"
         }
       ]

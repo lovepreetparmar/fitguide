@@ -17,6 +17,7 @@ interface AppStore {
   setCachedNutrition: (log: NutritionLog) => void;
   addWater: (ml: number) => void;
   unlockAchievement: (id: string) => void;
+  clearProgressData: () => void;
   setOffline: (offline: boolean) => void;
 }
 
@@ -64,6 +65,16 @@ export const useAppStore = create<AppStore>()(
             ? state.achievements
             : [...state.achievements, id],
         })),
+
+      clearProgressData: () =>
+        set({
+          streak: 0,
+          lastWorkoutDate: null,
+          cachedWorkouts: [],
+          achievements: [],
+          waterIntakeMl: 0,
+          cachedNutrition: null,
+        }),
 
       setOffline: (offline) => set({ isOffline: offline }),
     }),
