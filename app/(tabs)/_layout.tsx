@@ -33,6 +33,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="diary"
+        options={{
+          title: 'Diary',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="nutrition-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="workout"
         options={{
           title: 'Workout',
@@ -44,10 +53,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="exercises"
         options={{
-          title: 'Exercises',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" size={size} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen

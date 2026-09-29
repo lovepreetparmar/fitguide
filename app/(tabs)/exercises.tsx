@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { View, Text, FlatList, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/Input';
 import { Chip } from '@/components/ui/Chip';
 import { ExerciseCard } from '@/components/exercise/ExerciseCard';
 import { BodyMap } from '@/components/3d/BodyMap';
-import { exerciseService } from '@/services/exercises';
+import { useExercises } from '@/hooks/useFitness';
+import { useAppStore } from '@/store/appStore';
 import { MUSCLE_GROUPS } from '@/constants/app';
 import type { MuscleGroup } from '@/types';
 
@@ -16,15 +16,17 @@ export default function ExercisesScreen() {
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'body'>('list');
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const favoriteExerciseIds = useAppStore((s) => s.favoriteExerciseIds);
 
-  const { data: exercises = [], isLoading } = useQuery({
-    queryKey: ['exercises', selectedMuscle, search],
-    queryFn: () =>
-      exerciseService.getExercises({
-        muscle: selectedMuscle ?? undefined,
-        search: search || undefined,
-      }),
+  const { data: exercises = [], isLoading } = useExercises({
+    muscle: selectedMuscle ?? undefined,
+    search: search || undefined,
   });
+
+  const visibleExercises = favoritesOnly
+    ? exercises.filter((ex) => favoriteExerciseIds.includes(ex.id))
+    : exercises;
 
   if (viewMode === 'body') {
     return (
@@ -62,7 +64,7 @@ export default function ExercisesScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <FlatList
-        data={exercises}
+        data={visibleExercises}
         keyExtractor={(item) => item.id}
         contentContainerClassName="px-5 pb-8"
         showsVerticalScrollIndicator={false}
@@ -70,7 +72,8 @@ export default function ExercisesScreen() {
           <View className="pt-2">
             <Text className="mb-2 text-2xl font-bold text-text">Exercises</Text>
             <Text className="mb-4 text-text-secondary">
-              {exercises.length} exercises in library
+              {visibleExercises.length} exercises
+              {favoritesOnly ? ' (favorites)' : ' in library'}
             </Text>
 
             <Input
@@ -81,9 +84,14 @@ export default function ExercisesScreen() {
               className="mb-4"
             />
 
-            <View className="mb-4 flex-row gap-2">
+            <View className="mb-4 flex-row flex-wrap gap-2">
               <Chip label="List" selected onPress={() => setViewMode('list')} />
               <Chip label="Body Map" selected={false} onPress={() => setViewMode('body')} />
+              <Chip
+                label="Favorites"
+                selected={favoritesOnly}
+                onPress={() => setFavoritesOnly((v) => !v)}
+              />
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4">

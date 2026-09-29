@@ -24,12 +24,23 @@ export function Card({
   return (
     <View
       className={cn(
-        'rounded-card bg-card',
-        variant === 'outlined' && 'border border-border',
+        'overflow-hidden rounded-card bg-card',
+        (variant === 'default' || variant === 'outlined' || variant === 'elevated') && 'border border-border',
         variant === 'elevated' && 'shadow-lg',
         paddingStyles[padding],
         className
       )}
+      style={
+        variant === 'elevated'
+          ? {
+              shadowColor: '#0076FC',
+              shadowOpacity: 0.16,
+              shadowRadius: 20,
+              shadowOffset: { width: 0, height: 10 },
+              elevation: 8,
+            }
+          : undefined
+      }
       {...props}
     >
       {children}

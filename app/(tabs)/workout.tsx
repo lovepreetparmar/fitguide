@@ -53,7 +53,14 @@ export default function WorkoutScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <ScrollView className="flex-1 px-5" showsVerticalScrollIndicator={false}>
         <Text className="mb-2 pt-2 text-2xl font-bold text-text">Workout</Text>
-        <Text className="mb-6 text-text-secondary">Generate and track your training</Text>
+        <Text className="mb-4 text-text-secondary">Generate and track your training</Text>
+        <Button
+          title="Exercise library"
+          variant="outline"
+          onPress={() => router.push('/(tabs)/exercises')}
+          fullWidth
+          className="mb-6"
+        />
 
         {activeSession && (
           <Card className="mb-4 border border-primary/30">

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Chip } from '@/components/ui/Chip';
 import { StatCard } from '@/components/ui/StatCard';
 import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { SimpleLineChart } from '@/components/ui/SimpleLineChart';
 import { RecoveryScore } from '@/components/home/RecoveryScore';
 import { useAuthStore } from '@/store/authStore';
@@ -14,7 +16,10 @@ import { getRecoveryColor, getRecoveryLabel } from '@/utils/format';
 
 export default function ProgressScreen() {
   const { profile } = useAuthStore();
+  const queryClient = useQueryClient();
   const [period, setPeriod] = useState<'week' | 'month' | 'year'>('month');
+  const [weightInput, setWeightInput] = useState('');
+  const [bodyFatInput, setBodyFatInput] = useState('');
 
   const { data: progress = [] } = useQuery({
     queryKey: ['progress', profile?.user_id, period],
@@ -34,8 +39,42 @@ export default function ProgressScreen() {
   }));
 
   const latestWeight = progress[progress.length - 1]?.weight_kg ?? profile?.weight_kg ?? 0;
-  const latestBodyFat = progress[progress.length - 1]?.body_fat_percent ?? 18;
+  const latestBodyFatEntry = progress[progress.length - 1]?.body_fat_percent;
   const recoveryScore = recoveryService.getOverallRecoveryScore(recovery);
+
+  const logMutation = useMutation({
+    mutationFn: async () => {
+      const userId = profile?.user_id ?? '';
+      const weight = parseFloat(weightInput.replace(',', '.'));
+      const bodyFat = bodyFatInput.trim()
+        ? parseFloat(bodyFatInput.replace(',', '.'))
+        : null;
+      if (!Number.isFinite(weight) || weight <= 0) {
+        throw new Error('Enter a valid weight in kg.');
+      }
+      const today = new Date().toISOString().split('T')[0];
+      return progressService.logProgress(userId, {
+        date: today,
+        weight_kg: weight,
+        body_fat_percent: bodyFat,
+        muscle_mass_kg: null,
+        calories: null,
+        workout_volume_kg: null,
+        notes: null,
+      });
+    },
+    onSuccess: async () => {
+      setWeightInput('');
+      setBodyFatInput('');
+      await queryClient.invalidateQueries({ queryKey: ['progress'] });
+      Alert.alert('Logged', 'Weight entry saved.');
+    },
+    onError: (err: Error) => Alert.alert('Could not save', err.message),
+  });
+
+  const handleLogWeight = () => {
+    logMutation.mutate();
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -56,8 +95,42 @@ export default function ProgressScreen() {
 
         <View className="mb-4 flex-row gap-3">
           <StatCard label="Weight" value={latestWeight.toFixed(1)} unit="kg" icon="scale-outline" className="flex-1" />
-          <StatCard label="Body Fat" value={latestBodyFat.toFixed(1)} unit="%" icon="body-outline" iconColor="#00D9A5" className="flex-1" />
+          <StatCard
+            label="Body Fat"
+            value={latestBodyFatEntry != null ? latestBodyFatEntry.toFixed(1) : '—'}
+            unit={latestBodyFatEntry != null ? '%' : ''}
+            icon="body-outline"
+            iconColor="#00D9A5"
+            className="flex-1"
+          />
         </View>
+
+        <Card className="mb-4">
+          <Text className="mb-3 text-base font-semibold text-text">Log weight</Text>
+          <View className="mb-3 flex-row gap-3">
+            <Input
+              label="Weight (kg)"
+              value={weightInput}
+              onChangeText={setWeightInput}
+              keyboardType="decimal-pad"
+              placeholder={latestWeight.toFixed(1)}
+              className="flex-1"
+            />
+            <Input
+              label="Body fat %"
+              value={bodyFatInput}
+              onChangeText={setBodyFatInput}
+              keyboardType="decimal-pad"
+              placeholder="optional"
+              className="flex-1"
+            />
+          </View>
+          <Button
+            title={logMutation.isPending ? 'Saving…' : 'Save entry'}
+            onPress={handleLogWeight}
+            disabled={logMutation.isPending}
+          />
+        </Card>
 
         <Card className="mb-4">
           <Text className="mb-4 text-base font-semibold text-text">Weight Trend</Text>

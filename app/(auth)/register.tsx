@@ -10,25 +10,13 @@ import {
 import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { registerFormSchema, type RegisterForm, PASSWORD_MIN_LENGTH } from '@/constants/auth';
 import { useAuthStore } from '@/store/authStore';
-
-const registerSchema = z
-  .object({
-    email: z.string().email('Please enter a valid email'),
-    password: z.string().min(6, 'Password must be at least 6 characters'),
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: 'Passwords do not match',
-    path: ['confirmPassword'],
-  });
-
-type RegisterForm = z.infer<typeof registerSchema>;
+import { formatAuthError } from '@/utils/authErrors';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -36,7 +24,7 @@ export default function RegisterScreen() {
   const [error, setError] = useState('');
 
   const { control, handleSubmit, formState: { errors } } = useForm<RegisterForm>({
-    resolver: zodResolver(registerSchema),
+    resolver: zodResolver(registerFormSchema),
     defaultValues: { email: '', password: '', confirmPassword: '' },
   });
 
@@ -45,8 +33,8 @@ export default function RegisterScreen() {
       setError('');
       await signUp(data.email, data.password);
       router.replace('/(auth)/onboarding');
-    } catch {
-      setError('Registration failed. Please try again.');
+    } catch (err) {
+      setError(formatAuthError(err));
     }
   };
 
@@ -66,7 +54,8 @@ export default function RegisterScreen() {
 
           <Text className="mb-2 text-3xl font-bold text-text">Create account</Text>
           <Text className="mb-8 text-base text-text-secondary">
-            Start your personalized fitness journey
+            Start your personalized fitness journey. If you used guest mode, your progress stays on
+            this account.
           </Text>
 
           {error ? (
@@ -99,7 +88,7 @@ export default function RegisterScreen() {
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
                 label="Password"
-                placeholder="At least 6 characters"
+                placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`}
                 icon="lock-closed-outline"
                 secureTextEntry
                 value={value}

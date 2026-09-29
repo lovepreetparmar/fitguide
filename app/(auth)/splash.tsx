@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
@@ -10,9 +10,13 @@ import Animated, {
   withSpring,
   Easing,
 } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
-import { APP_NAME } from '@/constants/app';
-import { Button } from '@/components/ui/Button';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { AuthScreenBackground } from '@/components/auth/AuthScreenBackground';
+import { AuthLandingBranding } from '@/components/auth/AuthLandingBranding';
+import { AuthLandingHero } from '@/components/auth/AuthLandingHero';
+import { AuthLandingFeatureRow } from '@/components/auth/AuthLandingFeatureRow';
+import { AuthLegalFooter } from '@/components/auth/AuthLegalFooter';
 
 export default function SplashScreen() {
   const router = useRouter();
@@ -21,8 +25,8 @@ export default function SplashScreen() {
   const contentTranslateY = useSharedValue(20);
 
   useEffect(() => {
-    contentOpacity.value = withDelay(150, withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) }));
-    contentTranslateY.value = withDelay(150, withSpring(0, { damping: 18, stiffness: 120 }));
+    contentOpacity.value = withDelay(100, withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) }));
+    contentTranslateY.value = withDelay(100, withSpring(0, { damping: 18, stiffness: 120 }));
   }, []);
 
   const contentStyle = useAnimatedStyle(() => ({
@@ -30,32 +34,65 @@ export default function SplashScreen() {
     transform: [{ translateY: contentTranslateY.value }],
   }));
 
+  const haptic = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
   return (
     <View className="flex-1 bg-background">
-      <LinearGradient
-        colors={['#0D0B1A', '#090909', '#090909']}
-        locations={[0, 0.5, 1]}
-        className="absolute inset-0"
-      />
+      <AuthScreenBackground variant="landing" />
 
       <SafeAreaView className="flex-1" edges={['top', 'bottom']}>
-        <View className="flex-1 items-center justify-center px-8">
-          <Animated.View style={contentStyle} className="w-full max-w-sm items-center">
-            <Text className="mb-2 text-center text-4xl font-bold tracking-tight text-text">
-              {APP_NAME}
-            </Text>
-            <Text className="mb-10 text-center text-base text-text-secondary">
-              Train smarter. Lift better.
-            </Text>
+        <ScrollView
+          contentContainerClassName="flex-grow px-6 pb-6 pt-2"
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View style={contentStyle} className="w-full max-w-sm flex-1 self-center">
+            <AuthLandingBranding />
 
-            <Button
-              title="Sign In"
-              onPress={() => router.push('/(auth)/login')}
-              fullWidth
-              size="lg"
-            />
+            <AuthLandingHero />
+
+            <AuthLandingFeatureRow />
+
+            <View className="mt-6">
+              <Pressable
+                testID="splash-get-started"
+                onPress={() => {
+                  haptic();
+                  router.push('/(auth)/register');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Get Started"
+                className="relative mb-3 h-14 w-full items-center justify-center rounded-full bg-primary active:opacity-90"
+                style={{
+                  shadowColor: '#6C63FF',
+                  shadowOffset: { width: 0, height: 8 },
+                  shadowOpacity: 0.35,
+                  shadowRadius: 16,
+                  elevation: 6,
+                }}
+              >
+                <Text className="text-lg font-semibold text-white">Get Started</Text>
+                <View className="absolute right-5">
+                  <Ionicons name="arrow-forward" size={22} color="#FFFFFF" />
+                </View>
+              </Pressable>
+
+              <Pressable
+                testID="splash-sign-in"
+                onPress={() => {
+                  haptic();
+                  router.push('/(auth)/login');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Sign In"
+                className="items-center py-2 active:opacity-80"
+              >
+                <Text className="text-base font-semibold text-primary">Sign In</Text>
+              </Pressable>
+
+              <AuthLegalFooter />
+            </View>
           </Animated.View>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </View>
   );

@@ -9,6 +9,12 @@ export const isSupabaseConfigured = Boolean(
   process.env.EXPO_PUBLIC_SUPABASE_URL && process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
 );
 
+if (__DEV__ && !isSupabaseConfigured) {
+  console.warn(
+    '[Fit Guide] EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY missing — using local-only mode.'
+  );
+}
+
 const ExpoSecureStoreAdapter = {
   getItem: (key: string) => SecureStore.getItemAsync(key),
   setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),

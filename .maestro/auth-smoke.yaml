@@ -1,0 +1,45 @@
+appId: com.fitguide.app
+---
+- launchApp
+- runFlow:
+    when:
+      visible: Send You Notifications
+    commands:
+      - tapOn: Don't Allow
+- runFlow:
+    when:
+      visible: Welcome to Fit Guide
+    commands:
+      - assertVisible:
+          id: onboarding-welcome
+- runFlow:
+    when:
+      notVisible: Welcome to Fit Guide
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: splash-sign-in
+          timeout: 90000
+      - tapOn:
+          id: splash-sign-in
+      - extendedWaitUntil:
+          visible:
+            id: login-continue-guest
+          timeout: 20000
+      - assertVisible:
+          id: login-continue-google
+      - assertVisible:
+          id: login-continue-email
+      - assertVisible:
+          id: login-continue-guest
+      - tapOn:
+          id: login-continue-guest
+      - runFlow:
+          when:
+            visible: Guest mode (offline)
+          commands:
+            - tapOn: OK
+      - extendedWaitUntil:
+          visible:
+            id: onboarding-welcome
+          timeout: 20000

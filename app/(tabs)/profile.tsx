@@ -7,12 +7,34 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useAuthStore } from '@/store/authStore';
 import { useAppStore } from '@/store/appStore';
+import { useQuery } from '@tanstack/react-query';
+import { engagementService } from '@/services/engagement';
+import { achievementsService } from '@/services/achievements';
 import { FITNESS_GOALS, EXPERIENCE_LEVELS } from '@/constants/app';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { profile, signOut } = useAuthStore();
-  const { streak, achievements } = useAppStore();
+  const { streak: cachedStreak, achievements: localAchievements } = useAppStore();
+  const userId = profile?.user_id ?? '';
+
+  const { data: engagement } = useQuery({
+    queryKey: ['engagement', userId],
+    queryFn: () => engagementService.fetch(userId),
+    enabled: Boolean(userId),
+  });
+
+  const { data: serverAchievements = [] } = useQuery({
+    queryKey: ['achievements', userId],
+    queryFn: () => achievementsService.list(userId),
+    enabled: Boolean(userId),
+  });
+
+  const streak = engagement?.current_streak ?? cachedStreak;
+  const achievements =
+    serverAchievements.length > 0
+      ? serverAchievements.map((a) => a.achievement_type)
+      : localAchievements;
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -29,6 +51,19 @@ export default function ProfileScreen() {
   };
 
   const handleMenuPress = (label: string) => {
+    const routes: Record<string, string> = {
+      Nutrition: '/(tabs)/diary',
+      'Body Measurements': '/measurements',
+      Notifications: '/settings',
+      Settings: '/settings',
+      'Export Data': '/settings/privacy',
+      Privacy: '/settings/privacy',
+    };
+    const path = routes[label];
+    if (path) {
+      router.push(path as '/(tabs)/diary');
+      return;
+    }
     Alert.alert(label, 'This feature is coming soon.');
   };
 

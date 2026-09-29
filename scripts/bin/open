@@ -1,0 +1,8 @@
+#!/bin/sh
+# React Native CLI tries to open Simulator.app; newer Xcode may only run CoreSimulator headless.
+for arg in "$@"; do
+  case "$arg" in
+    *Simulator.app*) exit 0 ;;
+  esac
+done
+exec /usr/bin/open "$@"

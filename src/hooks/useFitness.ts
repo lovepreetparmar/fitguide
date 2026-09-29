@@ -3,6 +3,8 @@ import { exerciseService } from '@/services/exercises';
 import { workoutService } from '@/services/workout';
 import { recoveryService, progressService } from '@/services/progress';
 import { nutritionService } from '@/services/nutrition';
+import { nutritionQueryKeys } from '@/constants/nutritionQueryKeys';
+import { todayDateString } from '@/utils/nutritionDate';
 import type { MuscleGroup } from '@/types';
 
 export function useExercises(filters?: {
@@ -39,10 +41,10 @@ export function useProgress(userId: string, period: 'week' | 'month' | 'year' = 
   });
 }
 
-export function useNutrition(userId: string) {
+export function useNutrition(userId: string, date = todayDateString()) {
   return useQuery({
-    queryKey: ['nutrition', userId],
-    queryFn: () => nutritionService.getTodayLog(userId),
+    queryKey: nutritionQueryKeys.log(userId, date),
+    queryFn: () => nutritionService.getLogForDate(userId, date),
     enabled: !!userId,
   });
 }
@@ -52,7 +54,7 @@ export function useLogWater(userId: string) {
   return useMutation({
     mutationFn: (amountMl: number) => nutritionService.logWater(userId, amountMl),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['nutrition', userId] });
+      queryClient.invalidateQueries({ queryKey: nutritionQueryKeys.log(userId, todayDateString()) });
     },
   });
 }

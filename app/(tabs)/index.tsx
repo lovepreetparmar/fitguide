@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +17,10 @@ import { recoveryService, progressService } from '@/services/progress';
 import { aiCoachService } from '@/services/ai';
 import { workoutService } from '@/services/workout';
 import { nutritionService } from '@/services/nutrition';
+import { nutritionMealsService } from '@/services/nutritionMeals';
+import { nutritionQueryKeys } from '@/constants/nutritionQueryKeys';
+import { todayDateString } from '@/utils/nutritionDate';
+import { engagementService } from '@/services/engagement';
 import { getGreeting } from '@/utils/format';
 
 function getWorkoutsThisWeek(sessions: { completed_at: string | null }[]): number {
@@ -35,7 +39,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { profile } = useAuthStore();
-  const { streak, achievements } = useAppStore();
+  const { streak: cachedStreak, achievements } = useAppStore();
   const { currentPlan, setCurrentPlan } = useWorkoutStore();
   const [generating, setGenerating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -52,11 +56,76 @@ export default function HomeScreen() {
     enabled: !!profile,
   });
 
+  const today = todayDateString();
+  const homeUserId = profile?.user_id ?? '';
+
   const { data: nutrition } = useQuery({
-    queryKey: ['nutrition', profile?.user_id],
-    queryFn: () => nutritionService.getTodayLog(profile?.user_id ?? ''),
+    queryKey: nutritionQueryKeys.log(homeUserId, today),
+    queryFn: () => nutritionService.getTodayLog(homeUserId),
     enabled: !!profile,
   });
+
+  const { data: mealItems = [] } = useQuery({
+    queryKey: nutritionQueryKeys.mealItems(homeUserId, today),
+    queryFn: () => nutritionMealsService.getTodayMealItems(homeUserId),
+    enabled: !!profile,
+  });
+
+  const nutritionLog = useMemo(() => {
+    const userId = profile?.user_id ?? '';
+    const today = new Date().toISOString().split('T')[0];
+    const empty = {
+      id: 'preview',
+      user_id: userId,
+      date: today,
+      calories: 0,
+      protein_g: 0,
+      carbs_g: 0,
+      fat_g: 0,
+      fiber_g: 0,
+      water_ml: 0,
+    };
+    const base = nutrition ?? empty;
+    if (!mealItems.length) return base;
+    const totals = mealItems.reduce(
+      (acc, item) => ({
+        calories: acc.calories + item.calories,
+        protein_g: acc.protein_g + item.protein_g,
+        carbs_g: acc.carbs_g + item.carbs_g,
+        fat_g: acc.fat_g + item.fat_g,
+        fiber_g: acc.fiber_g + item.fiber_g,
+      }),
+      { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 }
+    );
+    return {
+      ...base,
+      calories: Math.round(totals.calories),
+      protein_g: totals.protein_g,
+      carbs_g: totals.carbs_g,
+      fat_g: totals.fat_g,
+      fiber_g: totals.fiber_g,
+    };
+  }, [nutrition, mealItems, profile?.user_id]);
+
+  const macroTargets = useMemo(
+    () => nutritionService.calculateMacros(profile),
+    [profile]
+  );
+  const caloriesRemaining = Math.max(0, macroTargets.calories - nutritionLog.calories);
+
+  const { data: engagement } = useQuery({
+    queryKey: ['engagement', profile?.user_id],
+    queryFn: async () => {
+      const row = await engagementService.fetch(profile?.user_id ?? '');
+      if (row) {
+        useAppStore.getState().setEngagementCache(row.current_streak, row.last_workout_date);
+      }
+      return row;
+    },
+    enabled: !!profile?.user_id,
+  });
+
+  const streak = engagement?.current_streak ?? cachedStreak;
 
   const { data: progress = [] } = useQuery({
     queryKey: ['progress', profile?.user_id, 'month'],
@@ -91,6 +160,7 @@ export default function HomeScreen() {
     setRefreshing(true);
     await queryClient.invalidateQueries({ queryKey: ['recovery'] });
     await queryClient.invalidateQueries({ queryKey: ['nutrition'] });
+    await queryClient.invalidateQueries({ queryKey: ['engagement'] });
     await queryClient.invalidateQueries({ queryKey: ['progress'] });
     await queryClient.invalidateQueries({ queryKey: ['workout-sessions'] });
     setRefreshing(false);
@@ -175,7 +245,7 @@ export default function HomeScreen() {
             />
             <StatCard
               label="Water"
-              value={nutrition?.water_ml ?? 0}
+              value={nutritionLog.water_ml}
               unit="ml"
               icon="water-outline"
               iconColor="#45B7D1"
@@ -186,24 +256,31 @@ export default function HomeScreen() {
         <View className="mb-4">
           <StatCard
             label="Calories"
-            value={nutrition?.calories?.toLocaleString() ?? '0'}
+            value={nutritionLog.calories.toLocaleString()}
             unit="kcal"
             icon="flame-outline"
             iconColor="#FF5252"
           />
         </View>
 
-        {nutrition && (
-          <View className="mb-4">
-            <NutritionCard
-              log={nutrition}
-              targets={nutritionService.calculateMacros(
-                profile?.weight_kg ?? 75,
-                profile?.goal ?? 'general_fitness'
-              )}
-            />
+        <View className="mb-4">
+          <View className="mb-2 flex-row items-center justify-between">
+            <View>
+              <Text className="text-lg font-semibold text-text">Nutrition</Text>
+              <Text className="text-xs text-text-secondary">
+                {caloriesRemaining.toLocaleString()} kcal remaining
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/diary')}
+              accessibilityRole="button"
+              accessibilityLabel="Log nutrition"
+            >
+              <Text className="text-sm font-semibold text-primary">Log</Text>
+            </TouchableOpacity>
           </View>
-        )}
+          <NutritionCard log={nutritionLog} targets={macroTargets} />
+        </View>
 
         <View className="mb-4">
           <Text className="mb-3 text-lg font-semibold text-text">Weekly Goal</Text>

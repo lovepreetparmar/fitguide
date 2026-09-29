@@ -4,8 +4,10 @@ import {
   Text,
   ActivityIndicator,
   type TouchableOpacityProps,
+  View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
 import { cn } from '@/utils/cn';
 
 interface ButtonProps extends TouchableOpacityProps {
@@ -65,9 +67,10 @@ export function Button({
   return (
     <TouchableOpacity
       className={cn(
-        'flex-row items-center justify-center rounded-button',
-        variantStyles[variant],
-        sizeStyles[size],
+        'overflow-hidden rounded-button',
+        variant !== 'primary' && 'flex-row items-center justify-center',
+        variant !== 'primary' && variantStyles[variant],
+        variant !== 'primary' && sizeStyles[size],
         fullWidth && 'w-full',
         (disabled || loading) && 'opacity-50',
         className
@@ -77,22 +80,60 @@ export function Button({
       activeOpacity={0.8}
       {...props}
     >
-      {loading ? (
-        <ActivityIndicator color={variant === 'secondary' ? '#090909' : '#FFFFFF'} />
+      {variant === 'primary' ? (
+        <LinearGradient
+          colors={['#4AA3FF', '#0076FC']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            paddingHorizontal: size === 'sm' ? 16 : size === 'md' ? 24 : 32,
+            paddingVertical: size === 'sm' ? 10 : size === 'md' ? 15 : 18,
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'row',
+            shadowColor: '#0076FC',
+            shadowOpacity: 0.24,
+            shadowRadius: 18,
+            shadowOffset: { width: 0, height: 10 },
+          }}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              {icon}
+              <Text
+                className={cn(
+                  'font-semibold text-white',
+                  sizeTextStyles[size],
+                  icon && 'ml-2'
+                )}
+              >
+                {title}
+              </Text>
+            </>
+          )}
+        </LinearGradient>
       ) : (
-        <>
-          {icon}
-          <Text
-            className={cn(
-              'font-semibold',
-              variantTextStyles[variant],
-              sizeTextStyles[size],
-              icon && 'ml-2'
-            )}
-          >
-            {title}
-          </Text>
-        </>
+        <View className="flex-row items-center justify-center">
+          {loading ? (
+            <ActivityIndicator color={variant === 'secondary' ? '#090909' : '#FFFFFF'} />
+          ) : (
+            <>
+              {icon}
+              <Text
+                className={cn(
+                  'font-semibold',
+                  variantTextStyles[variant],
+                  sizeTextStyles[size],
+                  icon && 'ml-2'
+                )}
+              >
+                {title}
+              </Text>
+            </>
+          )}
+        </View>
       )}
     </TouchableOpacity>
   );

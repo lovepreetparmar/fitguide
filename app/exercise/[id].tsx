@@ -6,19 +6,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
-import { ExerciseDemoPlayer } from '@/components/exercise/ExerciseDemoPlayer';
 import { exerciseService } from '@/services/exercises';
 import { workoutService } from '@/services/workout';
 import { aiCoachService } from '@/services/ai';
 import { MUSCLE_GROUPS } from '@/constants/app';
 import { useAuthStore } from '@/store/authStore';
+import { useAppStore } from '@/store/appStore';
 import { useLocalSearchParams } from 'expo-router';
 
 export default function ExerciseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { profile } = useAuthStore();
+  const favoriteExerciseIds = useAppStore((s) => s.favoriteExerciseIds);
+  const toggleFavoriteExercise = useAppStore((s) => s.toggleFavoriteExercise);
   const [activeTab, setActiveTab] = useState<'instructions' | 'tips' | 'history'>('instructions');
+  const isFavorite = id ? favoriteExerciseIds.includes(id) : false;
 
   const { data: exercise, isLoading, isError } = useQuery({
     queryKey: ['exercise', id],
@@ -54,12 +57,13 @@ export default function ExerciseDetailScreen() {
   const muscle = MUSCLE_GROUPS.find((m) => m.id === exercise.primary_muscle);
   const muscleColor = muscle?.color ?? '#6C63FF';
   const muscleLabel = muscle?.label ?? exercise.primary_muscle;
+  const hasMedia = Boolean(exercise.model_url || exercise.video_url || exercise.thumbnail_url);
   const aiTip = aiCoachService.generateExerciseRecommendation(exercise.name, 60, 10, 10);
 
   return (
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View className="relative bg-card">
+        <View className="relative h-64 items-center justify-center bg-card">
           <TouchableOpacity
             onPress={() => router.back()}
             className="absolute left-4 top-4 z-10 h-10 w-10 items-center justify-center rounded-full bg-background/80"
@@ -68,8 +72,24 @@ export default function ExerciseDetailScreen() {
           >
             <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
           </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => id && toggleFavoriteExercise(id)}
+            className="absolute right-4 top-4 z-10 h-10 w-10 items-center justify-center rounded-full bg-background/80"
+            accessibilityRole="button"
+            accessibilityLabel={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={22} color="#FF5252" />
+          </TouchableOpacity>
 
-          <ExerciseDemoPlayer exercise={exercise} height={280} showLabel />
+          <View
+            className="h-32 w-32 items-center justify-center rounded-3xl"
+            style={{ backgroundColor: `${muscleColor}30` }}
+          >
+            <Ionicons name="barbell" size={64} color={muscleColor} />
+          </View>
+          {hasMedia && (
+            <Text className="mt-2 text-xs text-text-muted">3D model available</Text>
+          )}
         </View>
 
         <View className="px-5 pt-5">
