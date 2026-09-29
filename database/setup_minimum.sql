@@ -37,15 +37,26 @@ CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.
 CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can delete own profile" ON profiles FOR DELETE USING (auth.uid() = user_id);
 
-CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
-  INSERT INTO profiles (user_id, name, onboarding_completed)
+  INSERT INTO public.profiles (user_id, name, onboarding_completed)
   VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'name', 'Athlete'), FALSE)
   ON CONFLICT (user_id) DO NOTHING;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+
+DROP POLICY IF EXISTS "Auth admin can insert profiles on signup" ON public.profiles;
+CREATE POLICY "Auth admin can insert profiles on signup"
+  ON public.profiles
+  FOR INSERT
+  TO supabase_auth_admin
+  WITH CHECK (true);
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created

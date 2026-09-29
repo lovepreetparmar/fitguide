@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInRight, FadeOutLeft } from 'react-native-reanimated';
@@ -31,9 +31,10 @@ const STEPS = [
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { setOnboardingData, completeOnboarding, onboardingData } = useAuthStore();
+  const { setOnboardingData, completeOnboarding, onboardingData, signOut } = useAuthStore();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   const [name, setName] = useState(onboardingData.name ?? '');
   const [age, setAge] = useState(String(onboardingData.age ?? ''));
@@ -72,6 +73,30 @@ export default function OnboardingScreen() {
       case 7: return true;
       default: return false;
     }
+  };
+
+  const handleBackToSignIn = () => {
+    Alert.alert(
+      'Use a different account?',
+      'You will return to the sign-in screen so you can use Google, email, or guest.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          onPress: async () => {
+            setLeaving(true);
+            try {
+              await signOut();
+              router.replace('/(auth)/login');
+            } catch {
+              Alert.alert('Could not sign out', 'Please try again.');
+            } finally {
+              setLeaving(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleNext = async () => {
@@ -117,12 +142,23 @@ export default function OnboardingScreen() {
             <View className="mb-8 h-28 w-28 items-center justify-center rounded-3xl bg-primary">
               <Text className="text-5xl font-bold text-white">FG</Text>
             </View>
-            <Text className="mb-3 text-center text-3xl font-bold text-text">
+            <Text testID="onboarding-welcome" className="mb-3 text-center text-3xl font-bold text-text">
               Welcome to Fit Guide
             </Text>
             <Text className="text-center text-base leading-6 text-text-secondary">
               Let's personalize your fitness journey. This will only take a minute.
             </Text>
+            <Pressable
+              testID="onboarding-back-to-sign-in"
+              onPress={handleBackToSignIn}
+              disabled={leaving}
+              className="mt-8"
+              accessibilityRole="link"
+            >
+              <Text className="text-center text-sm font-medium text-primary">
+                Sign in with a different account
+              </Text>
+            </Pressable>
           </View>
         );
 

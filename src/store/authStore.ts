@@ -10,6 +10,9 @@ import type {
 import { authService, profileService } from '@/services/auth';
 import { recoveryService } from '@/services/progress';
 import { isSupabaseConfigured } from '@/services/supabase';
+import { formatAuthError, isSupabaseSignupDatabaseError } from '@/utils/authErrors';
+import { createLocalUserId, isLegacyGuestId, isLegacyOrLocalUserId } from '@/utils/userId';
+import { runPostAuthMigration } from '@/services/accountMigration';
 
 interface AuthStore extends AuthState {
   onboardingData: Partial<OnboardingData>;
@@ -22,39 +25,51 @@ interface AuthStore extends AuthState {
   signInWithGoogle: () => Promise<void>;
   signInWithApple: () => Promise<void>;
   signOut: () => Promise<void>;
-  signInAsGuest: () => void;
+  signInAsGuest: () => Promise<void>;
   completeOnboarding: (data?: OnboardingData) => Promise<void>;
   initialize: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  deleteAccount: () => Promise<void>;
+  deleteAccountSecure: () => Promise<void>;
 }
 
-const GUEST_USER: User = {
-  id: 'guest',
-  email: 'guest@fitguide.app',
-  created_at: new Date().toISOString(),
-};
+function emptyProfileForUser(userId: string, name = 'Athlete'): Profile {
+  const now = new Date().toISOString();
+  return {
+    id: `profile_${userId}`,
+    user_id: userId,
+    name,
+    age: null,
+    height_cm: null,
+    weight_kg: null,
+    gender: null,
+    goal: null,
+    experience: null,
+    workout_days: null,
+    workout_time_minutes: null,
+    equipment: [],
+    medical_limitations: null,
+    previous_injuries: null,
+    avatar_url: null,
+    units: 'metric',
+    onboarding_completed: false,
+    created_at: now,
+    updated_at: now,
+  };
+}
 
-const GUEST_PROFILE: Profile = {
-  id: 'guest_profile',
-  user_id: 'guest',
-  name: 'Athlete',
-  age: 28,
-  height_cm: 175,
-  weight_kg: 75,
-  gender: 'male',
-  goal: 'build_muscle',
-  experience: 'intermediate',
-  workout_days: 4,
-  workout_time_minutes: 60,
-  equipment: ['barbell', 'dumbbells', 'bench', 'squat_rack', 'cables', 'pull_up_bar', 'bodyweight'],
-  medical_limitations: null,
-  previous_injuries: null,
-  avatar_url: null,
-  units: 'metric',
-  onboarding_completed: true,
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-};
+function mapSupabaseUser(authUser: {
+  id: string;
+  email?: string | null;
+  created_at?: string;
+  is_anonymous?: boolean;
+}): User {
+  return {
+    id: authUser.id,
+    email: authUser.email ?? (authUser.is_anonymous ? 'guest@fitguide.app' : ''),
+    created_at: authUser.created_at ?? new Date().toISOString(),
+  };
+}
 
 export const useAuthStore = create<AuthStore>()(
   persist(
@@ -75,11 +90,16 @@ export const useAuthStore = create<AuthStore>()(
       signIn: async (email, password, rememberMe = true) => {
         set({ isLoading: true });
         try {
+          const previousUserId = get().user?.id;
           if (!isSupabaseConfigured) {
-            const user: User = { id: 'demo', email, created_at: new Date().toISOString() };
+            const user: User = {
+              id: createLocalUserId(),
+              email,
+              created_at: new Date().toISOString(),
+            };
             set({
               user,
-              profile: { ...GUEST_PROFILE, user_id: user.id, name: email.split('@')[0] },
+              profile: emptyProfileForUser(user.id, email.split('@')[0]),
               isAuthenticated: true,
               isGuest: false,
               rememberMe,
@@ -88,12 +108,10 @@ export const useAuthStore = create<AuthStore>()(
           }
           const { user: authUser } = await authService.signIn(email, password, rememberMe);
           if (authUser) {
-            const user: User = {
-              id: authUser.id,
-              email: authUser.email ?? email,
-              created_at: authUser.created_at,
-            };
-            const profile = await profileService.getProfile(user.id);
+            const user = mapSupabaseUser(authUser);
+            let profile = await profileService.getProfile(user.id);
+            await runPostAuthMigration(previousUserId, user.id, profile ?? get().profile);
+            if (!profile && get().profile) profile = get().profile;
             set({ user, profile, isAuthenticated: true, isGuest: false, rememberMe });
           }
         } finally {
@@ -104,19 +122,50 @@ export const useAuthStore = create<AuthStore>()(
       signUp: async (email, password) => {
         set({ isLoading: true });
         try {
+          const previousUserId = get().user?.id;
           if (!isSupabaseConfigured) {
-            const user: User = { id: 'demo', email, created_at: new Date().toISOString() };
-            set({ user, isAuthenticated: true, isGuest: false });
+            const user: User = {
+              id: createLocalUserId(),
+              email,
+              created_at: new Date().toISOString(),
+            };
+            set({
+              user,
+              profile: emptyProfileForUser(user.id, email.split('@')[0]),
+              isAuthenticated: true,
+              isGuest: false,
+            });
             return;
           }
-          const { user: authUser } = await authService.signUp(email, password);
+          const { isAnonymous } = await authService.getLinkingContext();
+          let authUser;
+          if (isAnonymous) {
+            authUser = await authService.linkEmailIdentity(email, password);
+          } else {
+            const data = await authService.signUp(email, password);
+            authUser = data.user;
+            if (authUser && !data.session) {
+              throw new Error(
+                'Check your email to confirm your account, then sign in with your password.'
+              );
+            }
+          }
           if (authUser) {
-            const user: User = {
-              id: authUser.id,
-              email: authUser.email ?? email,
-              created_at: authUser.created_at,
-            };
-            set({ user, isAuthenticated: true, isGuest: false });
+            const user = mapSupabaseUser(authUser);
+            let profile = await profileService.getProfile(user.id);
+            await runPostAuthMigration(previousUserId, user.id, profile ?? get().profile);
+            if (!profile) {
+              profile =
+                get().profile?.onboarding_completed
+                  ? get().profile
+                  : emptyProfileForUser(user.id, email.split('@')[0]);
+            }
+            set({
+              user,
+              profile,
+              isAuthenticated: true,
+              isGuest: false,
+            });
           }
         } finally {
           set({ isLoading: false });
@@ -126,9 +175,12 @@ export const useAuthStore = create<AuthStore>()(
       signInWithGoogle: async () => {
         set({ isLoading: true });
         try {
+          const previousUserId = get().user?.id;
           const user = await authService.signInWithGoogle();
           if (!user) throw new Error('Could not complete Google sign in');
-          const profile = await profileService.getProfile(user.id);
+          let profile = await profileService.getProfile(user.id);
+          await runPostAuthMigration(previousUserId, user.id, profile ?? get().profile);
+          if (!profile && get().profile) profile = get().profile;
           const displayName = profile ? undefined : await authService.getOAuthDisplayName();
           set((state) => ({
             user,
@@ -148,9 +200,12 @@ export const useAuthStore = create<AuthStore>()(
       signInWithApple: async () => {
         set({ isLoading: true });
         try {
+          const previousUserId = get().user?.id;
           const user = await authService.signInWithApple();
           if (!user) throw new Error('Could not complete Apple sign in');
-          const profile = await profileService.getProfile(user.id);
+          let profile = await profileService.getProfile(user.id);
+          await runPostAuthMigration(previousUserId, user.id, profile ?? get().profile);
+          if (!profile && get().profile) profile = get().profile;
           const displayName = profile ? undefined : await authService.getOAuthDisplayName();
           set((state) => ({
             user,
@@ -180,14 +235,65 @@ export const useAuthStore = create<AuthStore>()(
         });
       },
 
-      signInAsGuest: () => {
-        set({
-          user: GUEST_USER,
-          profile: GUEST_PROFILE,
-          isAuthenticated: true,
-          isGuest: true,
-          isLoading: false,
-        });
+      signInAsGuest: async () => {
+        set({ isLoading: true });
+        try {
+          if (!isSupabaseConfigured) {
+            const user: User = {
+              id: createLocalUserId(),
+              email: 'guest@fitguide.app',
+              created_at: new Date().toISOString(),
+            };
+            set({
+              user,
+              profile: emptyProfileForUser(user.id, 'Guest'),
+              isAuthenticated: true,
+              isGuest: true,
+              isLoading: false,
+            });
+            return;
+          }
+
+          try {
+            const { user: authUser } = await authService.signInAnonymously();
+            if (!authUser) throw new Error('Could not start guest session');
+
+            const user = mapSupabaseUser(authUser);
+            let profile = await profileService.getProfile(user.id);
+            if (!profile) {
+              profile = emptyProfileForUser(user.id, 'Guest');
+            }
+
+            set({
+              user,
+              profile,
+              isAuthenticated: true,
+              isGuest: true,
+              isLoading: false,
+            });
+          } catch (anonError) {
+            const message = formatAuthError(anonError);
+            if (!isSupabaseSignupDatabaseError(message)) {
+              throw anonError;
+            }
+            // Supabase trigger/RLS blocked anonymous signup — local guest (no cloud user row).
+            const user: User = {
+              id: createLocalUserId(),
+              email: 'guest@fitguide.app',
+              created_at: new Date().toISOString(),
+            };
+            set({
+              user,
+              profile: emptyProfileForUser(user.id, 'Guest'),
+              isAuthenticated: true,
+              isGuest: true,
+              isLoading: false,
+            });
+          }
+        } catch (error) {
+          set({ isLoading: false });
+          throw error;
+        }
       },
 
       completeOnboarding: async (data) => {
@@ -197,7 +303,7 @@ export const useAuthStore = create<AuthStore>()(
         const fullData = data ?? (onboardingData as OnboardingData);
         set({ onboardingData: fullData });
 
-        if (isSupabaseConfigured) {
+        if (isSupabaseConfigured && !isLegacyOrLocalUserId(user.id)) {
           const profile = await profileService.saveProfile(user.id, fullData);
           await recoveryService.initializeForUser(user.id);
           set({ profile });
@@ -206,8 +312,7 @@ export const useAuthStore = create<AuthStore>()(
 
         set({
           profile: {
-            ...GUEST_PROFILE,
-            user_id: user.id,
+            ...emptyProfileForUser(user.id, fullData.name),
             name: fullData.name,
             age: fullData.age,
             height_cm: fullData.height_cm,
@@ -228,25 +333,31 @@ export const useAuthStore = create<AuthStore>()(
       initialize: async () => {
         set({ isLoading: true });
         try {
+          const persisted = get();
+          if (
+            persisted.user &&
+            isLegacyGuestId(persisted.user.id) &&
+            isSupabaseConfigured
+          ) {
+            set({
+              user: null,
+              profile: null,
+              isAuthenticated: false,
+              isGuest: false,
+            });
+          }
+
           if (!isSupabaseConfigured) {
-            const state = get();
-            if (state.isAuthenticated && state.user) {
-              set({ isLoading: false });
-              return;
-            }
             set({ isLoading: false });
             return;
           }
 
           const session = await authService.getSession();
           if (session?.user) {
-            const user: User = {
-              id: session.user.id,
-              email: session.user.email ?? '',
-              created_at: session.user.created_at,
-            };
+            const user = mapSupabaseUser(session.user);
+            const isGuest = authService.isAnonymousUser(session.user);
             const profile = await profileService.getProfile(user.id);
-            set({ user, profile, isAuthenticated: true, isGuest: false });
+            set({ user, profile, isAuthenticated: true, isGuest });
           }
         } finally {
           set({ isLoading: false });
@@ -257,6 +368,55 @@ export const useAuthStore = create<AuthStore>()(
         if (isSupabaseConfigured) {
           await authService.resetPassword(email);
         }
+      },
+
+      deleteAccount: async () => {
+        const { user } = get();
+        if (!user) return;
+        if (isSupabaseConfigured && !isLegacyOrLocalUserId(user.id)) {
+          await profileService.deleteAccount(user.id);
+        } else {
+          await get().signOut();
+        }
+        set({
+          user: null,
+          profile: null,
+          isAuthenticated: false,
+          isGuest: false,
+          onboardingData: {},
+        });
+      },
+
+      deleteAccountSecure: async () => {
+        const { user } = get();
+        if (!user) return;
+        if (!isSupabaseConfigured || isLegacyOrLocalUserId(user.id)) {
+          await get().signOut();
+          set({
+            user: null,
+            profile: null,
+            isAuthenticated: false,
+            isGuest: false,
+            onboardingData: {},
+          });
+          return;
+        }
+        try {
+          await authService.invokeDeleteAccount();
+        } finally {
+          try {
+            await authService.signOut();
+          } catch {
+            /* session may already be invalid */
+          }
+        }
+        set({
+          user: null,
+          profile: null,
+          isAuthenticated: false,
+          isGuest: false,
+          onboardingData: {},
+        });
       },
     }),
     {

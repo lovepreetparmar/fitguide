@@ -1,23 +1,27 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, ScrollView, RefreshControl, Pressable } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Circle, Defs, LinearGradient as SvgGradient, Path, Stop } from 'react-native-svg';
-import { ExerciseDemoThumbnail } from '@/components/exercise/ExerciseDemoPlayer';
-import { PremiumActionButton } from '@/components/ui/PremiumActionButton';
+import { Button } from '@/components/ui/Button';
+import { StatCard } from '@/components/ui/StatCard';
+import { AIRecommendationCard } from '@/components/home/AIRecommendationCard';
+import { RecoveryScore } from '@/components/home/RecoveryScore';
+import { TodaysWorkoutCard } from '@/components/home/TodaysWorkoutCard';
+import { NutritionCard } from '@/components/home/NutritionCard';
 import { useAuthStore } from '@/store/authStore';
 import { useAppStore } from '@/store/appStore';
 import { useWorkoutStore } from '@/store/workoutStore';
-import { useDailyWorkoutSync } from '@/hooks/useDailyWorkoutSync';
-import { useWorkoutStartGuard } from '@/hooks/useWorkoutStartGuard';
 import { recoveryService, progressService } from '@/services/progress';
+import { aiCoachService } from '@/services/ai';
 import { workoutService } from '@/services/workout';
 import { nutritionService } from '@/services/nutrition';
-import { SAMPLE_EXERCISES } from '@/constants/exercises';
-import type { Exercise, ProgressEntry } from '@/types';
+import { nutritionMealsService } from '@/services/nutritionMeals';
+import { nutritionQueryKeys } from '@/constants/nutritionQueryKeys';
+import { todayDateString } from '@/utils/nutritionDate';
+import { engagementService } from '@/services/engagement';
+import { getGreeting } from '@/utils/format';
 
 function getWorkoutsThisWeek(sessions: { completed_at: string | null }[]): number {
   const now = new Date();
@@ -31,164 +35,12 @@ function getWorkoutsThisWeek(sessions: { completed_at: string | null }[]): numbe
   ).length;
 }
 
-function getGreetingByTime(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Good Morning,';
-  if (hour < 17) return 'Good Afternoon,';
-  return 'Good Evening,';
-}
-
-function formatLongDate(date = new Date()): string {
-  return date.toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  });
-}
-
-function buildProgressSeries(progress: ProgressEntry[]) {
-  const recent = progress.slice(-7);
-
-  if (recent.length >= 4) {
-    return recent.map((entry, index) => ({
-      label: new Date(entry.date).toLocaleDateString('en-US', { weekday: 'narrow' }),
-      value: entry.workout_volume_kg ?? entry.calories ?? entry.weight_kg ?? 0,
-      key: `${entry.date}-${index}`,
-    }));
-  }
-
-  return [
-    { key: 'm', label: 'M', value: 54 },
-    { key: 't', label: 'T', value: 62 },
-    { key: 'w', label: 'W', value: 58 },
-    { key: 'th', label: 'T', value: 76 },
-    { key: 'f', label: 'F', value: 71 },
-    { key: 's', label: 'S', value: 88 },
-    { key: 'su', label: 'S', value: 82 },
-  ];
-}
-
-function describeWorkout(planName?: string | null) {
-  const name = planName?.toLowerCase() ?? '';
-  if (name.includes('push')) return 'Chest • Triceps • Shoulders';
-  if (name.includes('pull')) return 'Back • Biceps • Rear Delts';
-  if (name.includes('leg')) return 'Quads • Hamstrings • Glutes';
-  return 'Strength • Hypertrophy • Conditioning';
-}
-
-function formatCompactNumber(value: number) {
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
-  return `${Math.round(value)}`;
-}
-
-function getRecoveryStatus(score: number) {
-  if (score >= 80) return 'Prime';
-  if (score >= 50) return 'Balanced';
-  return 'Deload';
-}
-
-function PremiumProgressRing({
-  score,
-  size = 132,
-}: {
-  score: number;
-  size?: number;
-}) {
-  const strokeWidth = 10;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (score / 100) * circumference;
-
-  return (
-    <View className="items-center justify-center">
-      <Svg width={size} height={size}>
-        <Defs>
-          <SvgGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor="#4AA3FF" />
-            <Stop offset="100%" stopColor="#0076FC" />
-          </SvgGradient>
-        </Defs>
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke="rgba(255,255,255,0.08)"
-          strokeWidth={strokeWidth}
-          fill="none"
-        />
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke="url(#ringGradient)"
-          strokeWidth={strokeWidth}
-          fill="none"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </Svg>
-      <View className="absolute items-center">
-        <Text className="text-4xl font-bold text-white">{score}</Text>
-        <Text className="mt-1 text-xs font-medium uppercase tracking-[2px] text-[#9E9E9E]">
-          {getRecoveryStatus(score)}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function PremiumStatTile({
-  label,
-  value,
-  detail,
-  icon,
-  large = false,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  large?: boolean;
-}) {
-  return (
-    <View
-      className={`rounded-[28px] border border-white/5 bg-[#111111] ${large ? 'min-h-[152px] p-5' : 'min-h-[132px] p-4'}`}
-      style={{
-        shadowColor: '#0076FC',
-        shadowOpacity: 0.16,
-        shadowRadius: 16,
-        shadowOffset: { width: 0, height: 8 },
-      }}
-    >
-      <View className="mb-6 h-11 w-11 items-center justify-center rounded-full bg-[#0076FC]/15">
-        <Ionicons name={icon} size={20} color="#0076FC" />
-      </View>
-      <Text className={`${large ? 'text-[30px]' : 'text-2xl'} font-bold text-white`}>{value}</Text>
-      <Text className="mt-1 text-sm font-medium text-white">{label}</Text>
-      <Text className="mt-2 text-xs leading-5 text-[#9E9E9E]">{detail}</Text>
-    </View>
-  );
-}
-
-type PremiumStatItem = {
-  label: string;
-  value: string;
-  detail: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  large?: boolean;
-};
-
 export default function HomeScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { profile } = useAuthStore();
-  const { streak, achievements } = useAppStore();
+  const { streak: cachedStreak, achievements } = useAppStore();
   const { currentPlan, setCurrentPlan } = useWorkoutStore();
-  useDailyWorkoutSync();
-  const { hasActiveWorkout, ensureNoActiveWorkout, ensureCanGenerateWorkout, openActiveWorkout } =
-    useWorkoutStartGuard();
   const [generating, setGenerating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -204,11 +56,76 @@ export default function HomeScreen() {
     enabled: !!profile,
   });
 
+  const today = todayDateString();
+  const homeUserId = profile?.user_id ?? '';
+
   const { data: nutrition } = useQuery({
-    queryKey: ['nutrition', profile?.user_id],
-    queryFn: () => nutritionService.getTodayLog(profile?.user_id ?? ''),
+    queryKey: nutritionQueryKeys.log(homeUserId, today),
+    queryFn: () => nutritionService.getTodayLog(homeUserId),
     enabled: !!profile,
   });
+
+  const { data: mealItems = [] } = useQuery({
+    queryKey: nutritionQueryKeys.mealItems(homeUserId, today),
+    queryFn: () => nutritionMealsService.getTodayMealItems(homeUserId),
+    enabled: !!profile,
+  });
+
+  const nutritionLog = useMemo(() => {
+    const userId = profile?.user_id ?? '';
+    const today = new Date().toISOString().split('T')[0];
+    const empty = {
+      id: 'preview',
+      user_id: userId,
+      date: today,
+      calories: 0,
+      protein_g: 0,
+      carbs_g: 0,
+      fat_g: 0,
+      fiber_g: 0,
+      water_ml: 0,
+    };
+    const base = nutrition ?? empty;
+    if (!mealItems.length) return base;
+    const totals = mealItems.reduce(
+      (acc, item) => ({
+        calories: acc.calories + item.calories,
+        protein_g: acc.protein_g + item.protein_g,
+        carbs_g: acc.carbs_g + item.carbs_g,
+        fat_g: acc.fat_g + item.fat_g,
+        fiber_g: acc.fiber_g + item.fiber_g,
+      }),
+      { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 }
+    );
+    return {
+      ...base,
+      calories: Math.round(totals.calories),
+      protein_g: totals.protein_g,
+      carbs_g: totals.carbs_g,
+      fat_g: totals.fat_g,
+      fiber_g: totals.fiber_g,
+    };
+  }, [nutrition, mealItems, profile?.user_id]);
+
+  const macroTargets = useMemo(
+    () => nutritionService.calculateMacros(profile),
+    [profile]
+  );
+  const caloriesRemaining = Math.max(0, macroTargets.calories - nutritionLog.calories);
+
+  const { data: engagement } = useQuery({
+    queryKey: ['engagement', profile?.user_id],
+    queryFn: async () => {
+      const row = await engagementService.fetch(profile?.user_id ?? '');
+      if (row) {
+        useAppStore.getState().setEngagementCache(row.current_streak, row.last_workout_date);
+      }
+      return row;
+    },
+    enabled: !!profile?.user_id,
+  });
+
+  const streak = engagement?.current_streak ?? cachedStreak;
 
   const { data: progress = [] } = useQuery({
     queryKey: ['progress', profile?.user_id, 'month'],
@@ -221,46 +138,35 @@ export default function HomeScreen() {
   const previousProgress = progress[progress.length - 2];
   const workoutsThisWeek = useMemo(() => getWorkoutsThisWeek(recentSessions), [recentSessions]);
   const weeklyTarget = profile?.workout_days ?? 4;
-  const profileWeight = latestProgress?.weight_kg ?? profile?.weight_kg ?? 72;
-  const workoutMinutes = currentPlan?.estimated_duration_minutes ?? profile?.workout_time_minutes ?? 45;
-  const heroPreviewExercises = useMemo(
-    () =>
-      currentPlan?.exercises.slice(0, 3).map((item) => ({
-        key: item.exercise_id,
-        name: item.exercise?.name ?? 'Exercise',
-      })) ?? SAMPLE_EXERCISES.slice(0, 3).map((item) => ({ key: item.id, name: item.name })),
-    [currentPlan]
-  );
+  const weeklyProgress = Math.min(100, (workoutsThisWeek / weeklyTarget) * 100);
+
   const weightTrend =
     latestProgress?.weight_kg != null && previousProgress?.weight_kg != null
       ? latestProgress.weight_kg - previousProgress.weight_kg
       : null;
 
-  const statTiles: PremiumStatItem[] = [
-    {
-      label: 'Workout Streak',
-      value: `${streak}`,
-      detail: 'Days of consistency',
-      icon: 'flame',
-    },
-    {
-      label: 'Sleep',
-      value: recoveryScore >= 85 ? '8.1h' : '7.3h',
-      detail: 'Recovered overnight',
-      icon: 'moon',
-    },
-  ];
+  const recommendations = useMemo(
+    () =>
+      aiCoachService.generateRecommendations({
+        profile,
+        recovery,
+        recentWorkouts: recentSessions,
+        streak,
+      }),
+    [profile, recovery, recentSessions, streak]
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await queryClient.invalidateQueries({ queryKey: ['recovery'] });
     await queryClient.invalidateQueries({ queryKey: ['nutrition'] });
+    await queryClient.invalidateQueries({ queryKey: ['engagement'] });
     await queryClient.invalidateQueries({ queryKey: ['progress'] });
     await queryClient.invalidateQueries({ queryKey: ['workout-sessions'] });
     setRefreshing(false);
   }, [queryClient]);
 
-  const runGenerateWorkout = async () => {
+  const handleGenerateWorkout = async () => {
     if (!profile) return;
     setGenerating(true);
     try {
@@ -275,191 +181,149 @@ export default function HomeScreen() {
     }
   };
 
-  const handleGenerateWorkout = () => {
-    ensureCanGenerateWorkout(() => {
-      void runGenerateWorkout();
-    });
-  };
-
   const handleStartWorkout = async () => {
     if (!currentPlan || !profile) return;
-
-    if (hasActiveWorkout) {
-      openActiveWorkout();
-      return;
-    }
-
-    ensureNoActiveWorkout(async () => {
-      if (useWorkoutStore.getState().activeSession) return;
-
-      const session = await workoutService.startSession(profile.user_id, currentPlan);
-      const started = useWorkoutStore.getState().startSession(session);
-      if (!started) return;
-      router.push('/workout/player');
-    });
+    const session = await workoutService.startSession(profile.user_id, currentPlan);
+    useWorkoutStore.getState().startSession(session);
+    router.push('/workout/player');
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-black" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="px-5 pb-32"
+        contentContainerClassName="px-5 pb-8"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0076FC" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6C63FF" />
         }
         showsVerticalScrollIndicator={false}
       >
-        <View className="pt-2">
-          <View className="mb-8 flex-row items-start justify-between">
-            <View className="flex-1 pr-4">
-              <Text className="text-[18px] font-medium text-white/92">{getGreetingByTime()}</Text>
-              <Text className="mt-1 text-[40px] font-bold tracking-[-1px] text-white">
-                {profile?.name ?? 'Athlete'}
-              </Text>
-              <Text className="mt-2 text-sm text-[#9E9E9E]">{formatLongDate()}</Text>
-            </View>
-            <View
-              className="rounded-full border border-white/5 bg-[#111111] px-4 py-3"
-              style={{
-                shadowColor: '#0076FC',
-                shadowOpacity: 0.14,
-                shadowRadius: 14,
-                shadowOffset: { width: 0, height: 8 },
-              }}
-            >
-              <View className="flex-row items-center">
-                <Ionicons name="flame" size={16} color="#0076FC" />
-                <Text className="ml-2 text-sm font-semibold text-white">{streak} day streak</Text>
-              </View>
-            </View>
+        <View className="mb-6 flex-row items-center justify-between pt-2">
+          <View>
+            <Text className="text-sm text-text-secondary">{getGreeting()}</Text>
+            <Text className="text-2xl font-bold text-text">{profile?.name ?? 'Athlete'}</Text>
           </View>
-
-          <View
-            className="mb-8 overflow-hidden rounded-[30px] border border-white/5 bg-[#111111]"
-            style={{
-              shadowColor: '#0076FC',
-              shadowOpacity: 0.2,
-              shadowRadius: 22,
-              shadowOffset: { width: 0, height: 12 },
-            }}
-          >
-            <LinearGradient
-              colors={['rgba(74,163,255,0.32)', 'rgba(0,118,252,0.14)', 'rgba(0,0,0,0)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              className="absolute inset-0"
-            />
-            <View className="p-6">
-              <View className="mb-6 flex-row items-start justify-between">
-                <View className="flex-1 pr-4">
-                  <Text className="text-xs font-semibold uppercase tracking-[2px] text-[#4AA3FF]">
-                    Today's Workout
-                  </Text>
-                  <Text className="mt-3 text-[32px] font-bold tracking-[-0.8px] text-white">
-                    {currentPlan?.name ?? 'Push Day'}
-                  </Text>
-                  <Text className="mt-2 text-base font-medium text-white/88">
-                    {workoutMinutes} min
-                  </Text>
-                  <Text className="mt-2 text-sm leading-6 text-[#9E9E9E]">
-                    {describeWorkout(currentPlan?.name)}
-                  </Text>
-                </View>
-                <View className="rounded-full border border-white/10 bg-white/5 px-3 py-2">
-                  <Text className="text-xs font-medium text-white/70">
-                    {currentPlan?.difficulty ?? 'intermediate'}
-                  </Text>
-                </View>
-              </View>
-
-              <View className="mb-6 flex-row">
-                {heroPreviewExercises.map((exercise, index) => (
-                  <View
-                    key={exercise.key}
-                    className={`mr-3 flex-1 rounded-[22px] border border-white/5 bg-black/20 p-3 ${index === 2 ? 'mr-0' : ''}`}
-                  >
-                    <Text className="text-xs uppercase tracking-[1.5px] text-[#7FAEF8]">
-                      {index === 0 ? 'Primary' : index === 1 ? 'Focus' : 'Finisher'}
-                    </Text>
-                    <Text className="mt-2 text-sm font-medium text-white">{exercise.name}</Text>
-                  </View>
-                ))}
-              </View>
-
-              <PremiumActionButton
-                title={
-                  hasActiveWorkout
-                    ? 'Continue Workout'
-                    : currentPlan
-                      ? 'Start Workout'
-                      : 'Generate Workout'
-                }
-                onPress={currentPlan ? handleStartWorkout : handleGenerateWorkout}
-              />
-            </View>
+          <View className="flex-row items-center rounded-full bg-card px-3 py-2">
+            <Ionicons name="flame" size={18} color="#FF5252" />
+            <Text className="ml-1 text-sm font-bold text-text">{streak}</Text>
           </View>
-
-          <View className="mb-8">
-            <View
-              className="overflow-hidden rounded-[30px] border border-white/5 bg-[#111111] p-5"
-              style={{
-                shadowColor: '#0076FC',
-                shadowOpacity: 0.15,
-                shadowRadius: 18,
-                shadowOffset: { width: 0, height: 10 },
-              }}
-            >
-              <LinearGradient
-                colors={['rgba(0,118,252,0.14)', 'rgba(0,118,252,0.02)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                className="absolute inset-0"
-              />
-              <View className="mb-5 flex-row items-center justify-between">
-                <View>
-                  <Text className="text-lg font-semibold text-white">Recovery Overview</Text>
-                  <Text className="mt-1 text-sm text-[#9E9E9E]">Readiness for today’s training</Text>
-                </View>
-                <View className="rounded-full bg-white/5 px-3 py-2">
-                  <Text className="text-xs font-medium text-[#7FAEF8]">{workoutsThisWeek}/{weeklyTarget} sessions</Text>
-                </View>
-              </View>
-
-              <View className="flex-row items-center">
-                <View className="mr-5">
-                  <PremiumProgressRing score={recoveryScore} />
-                </View>
-                <View className="flex-1 gap-3">
-                  <View className="rounded-[22px] bg-black/20 p-4">
-                    <Text className="text-xs uppercase tracking-[1.5px] text-[#7FAEF8]">Weight</Text>
-                    <Text className="mt-2 text-2xl font-bold text-white">{profileWeight}<Text className="text-base font-medium text-[#9E9E9E]"> kg</Text></Text>
-                    {weightTrend !== null && (
-                      <Text className="mt-2 text-xs text-[#9E9E9E]">
-                        {weightTrend < 0 ? 'Down' : 'Up'} {Math.abs(weightTrend).toFixed(1)} kg vs last check-in
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          <View className="mb-8">
-            <View className="mb-4 flex-row items-center justify-between">
-              <Text className="text-lg font-semibold text-white">Quick Stats</Text>
-              <Text className="text-sm text-[#9E9E9E]">Today at a glance</Text>
-            </View>
-            <View className="flex-row gap-4">
-              <View className="flex-1 gap-4">
-                <PremiumStatTile {...statTiles[0]} />
-              </View>
-              <View className="flex-1 gap-4">
-                <PremiumStatTile {...statTiles[1]} />
-              </View>
-            </View>
-          </View>
-
         </View>
+
+        <AIRecommendationCard recommendations={recommendations} />
+
+        <TodaysWorkoutCard
+          plan={currentPlan}
+          onStart={handleStartWorkout}
+          onGenerate={handleGenerateWorkout}
+          loading={generating}
+        />
+
+        <View className="mb-4 flex-row gap-3">
+          <View className="flex-1">
+            <RecoveryScore score={recoveryScore} size={100} />
+          </View>
+          <View className="flex-1 justify-between gap-3">
+            <StatCard
+              label="Weight"
+              value={latestProgress?.weight_kg ?? profile?.weight_kg ?? 0}
+              unit="kg"
+              icon="scale-outline"
+              trend={
+                weightTrend === null
+                  ? undefined
+                  : weightTrend < 0
+                    ? 'down'
+                    : weightTrend > 0
+                      ? 'up'
+                      : undefined
+              }
+              trendValue={
+                weightTrend !== null
+                  ? `${Math.abs(weightTrend).toFixed(1)}kg`
+                  : undefined
+              }
+            />
+            <StatCard
+              label="Water"
+              value={nutritionLog.water_ml}
+              unit="ml"
+              icon="water-outline"
+              iconColor="#45B7D1"
+            />
+          </View>
+        </View>
+
+        <View className="mb-4">
+          <StatCard
+            label="Calories"
+            value={nutritionLog.calories.toLocaleString()}
+            unit="kcal"
+            icon="flame-outline"
+            iconColor="#FF5252"
+          />
+        </View>
+
+        <View className="mb-4">
+          <View className="mb-2 flex-row items-center justify-between">
+            <View>
+              <Text className="text-lg font-semibold text-text">Nutrition</Text>
+              <Text className="text-xs text-text-secondary">
+                {caloriesRemaining.toLocaleString()} kcal remaining
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/diary')}
+              accessibilityRole="button"
+              accessibilityLabel="Log nutrition"
+            >
+              <Text className="text-sm font-semibold text-primary">Log</Text>
+            </TouchableOpacity>
+          </View>
+          <NutritionCard log={nutritionLog} targets={macroTargets} />
+        </View>
+
+        <View className="mb-4">
+          <Text className="mb-3 text-lg font-semibold text-text">Weekly Goal</Text>
+          <View className="rounded-card bg-card p-4">
+            <View className="mb-2 flex-row items-center justify-between">
+              <Text className="text-sm text-text-secondary">
+                {weeklyTarget} workouts per week
+              </Text>
+              <Text className="text-sm font-semibold text-primary">
+                {workoutsThisWeek} / {weeklyTarget}
+              </Text>
+            </View>
+            <View className="h-2 overflow-hidden rounded-full bg-border">
+              <View
+                className="h-full rounded-full bg-primary"
+                style={{ width: `${weeklyProgress}%` }}
+              />
+            </View>
+          </View>
+        </View>
+
+        {achievements.length > 0 && (
+          <View className="mb-4">
+            <Text className="mb-3 text-lg font-semibold text-text">Achievements</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {achievements.map((id) => (
+                <View key={id} className="mr-3 items-center rounded-card bg-card px-4 py-3">
+                  <Ionicons name="trophy" size={28} color="#FFC107" />
+                  <Text className="mt-2 text-xs text-text-secondary">{id.replace(/_/g, ' ')}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        <Button
+          title="Quick Start"
+          onPress={handleGenerateWorkout}
+          loading={generating}
+          fullWidth
+          size="lg"
+          icon={<Ionicons name="flash" size={20} color="#FFFFFF" />}
+        />
       </ScrollView>
     </SafeAreaView>
   );

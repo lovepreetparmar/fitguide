@@ -15,11 +15,12 @@
     "expo-auth-session": "~56.0.14",
     "expo-constants": "~56.0.18",
     "expo-crypto": "~56.0.4",
-    "expo-dev-client": "~56.0.21",
     "expo-font": "~56.0.7",
     "expo-haptics": "~56.0.3",
+    "expo-image-picker": "~56.0.25",
     "expo-linear-gradient": "~56.0.4",
     "expo-linking": "~56.0.14",
+    "expo-modules-jsi": "56.0.13",
     "expo-notifications": "~56.0.18",
     "expo-router": "~56.2.11",
     "expo-secure-store": "~56.0.4",
@@ -57,16 +58,19 @@
   },
   "scripts": {
     "start": "sh -c '. ./scripts/native-env.sh && npx expo start --dev-client'",
-    "ios": "sh -c '. ./scripts/native-env.sh && npx react-native run-ios --simulator \"iPhone 17 Pro\"'",
-    "ios:release": "sh -c '. ./scripts/native-env.sh && npx react-native run-ios --simulator \"iPhone 17 Pro\" --configuration Release --no-packager'",
+    "ios": "sh -c '. ./scripts/native-env.sh && npx react-native run-ios --simulator \"iPhone 18 Pro\" --no-packager'",
+    "ios:release": "sh -c '. ./scripts/native-env.sh && npx react-native run-ios --simulator \"iPhone 18 Pro\" --configuration Release --no-packager'",
     "android": "sh -c '. ./scripts/native-env.sh && npx react-native run-android'",
     "pods": "sh -c '. ./scripts/native-env.sh && cd ios && pod install'",
+    "ios:xcode": "open ios/FitGuide.xcworkspace",
+    "ios:archive": "sh -c 'mkdir -p ios/build && cd ios && xcodebuild -workspace FitGuide.xcworkspace -scheme FitGuide -configuration Release -destination generic/platform=iOS -archivePath build/FitGuide.xcarchive archive'",
+    "ios:ipa": "sh -c 'mkdir -p ios/build/ipa && cd ios && xcodebuild -exportArchive -archivePath build/FitGuide.xcarchive -exportPath build/ipa -exportOptionsPlist ExportOptions-development.plist && ls -la build/ipa/*.ipa'",
     "prebuild:ios": "sh -c '. ./scripts/native-env.sh && expo prebuild --platform ios'",
     "test": "jest",
     "test:watch": "jest --watch",
     "typecheck": "tsc --noEmit",
-    "link-media": "node scripts/link-exercise-media.mjs > database/seed_exercise_media.sql",
-    "download-media": "node scripts/download-exercise-media.mjs"
+    "auth:smoke": "node scripts/auth-smoke.mjs",
+    "test:e2e:auth": "sh scripts/run-auth-e2e.sh"
   },
   "private": true
 }

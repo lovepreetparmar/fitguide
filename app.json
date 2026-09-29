@@ -15,7 +15,19 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.fitguide.app",
-      "usesAppleSignIn": true
+      "infoPlist": {
+        "UIApplicationSceneManifest": {
+          "UIApplicationSupportsMultipleScenes": false,
+          "UISceneConfigurations": {
+            "UIWindowSceneSessionRoleApplication": [
+              {
+                "UISceneConfigurationName": "Default Configuration",
+                "UISceneDelegateClassName": "$(PRODUCT_MODULE_NAME).SceneDelegate"
+              }
+            ]
+          }
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -41,6 +53,13 @@
         {
           "icon": "./assets/fitguide_logo.png",
           "color": "#6C63FF"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Fit Guide needs photo access so you can scan meals from your library.",
+          "cameraPermission": "Fit Guide uses the camera to photograph meals for nutrition estimates."
         }
       ]
     ],

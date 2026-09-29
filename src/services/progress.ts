@@ -1,6 +1,9 @@
-import { supabase, isSupabaseConfigured } from './supabase';
-import type { MuscleGroup, ProgressEntry, RecoveryData, RecoveryStatus } from '@/types';
+import { supabase } from './supabase';
+import type { Measurement, MuscleGroup, ProgressEntry, RecoveryData, RecoveryStatus } from '@/types';
 import { MUSCLE_GROUPS } from '@/constants/app';
+import { canSyncUserToSupabase } from '@/utils/userId';
+import { useAppStore } from '@/store/appStore';
+import { outboxService } from '@/services/sync/outbox';
 
 const RECOVERY_THRESHOLDS = {
   recovered: 80,
@@ -9,6 +12,10 @@ const RECOVERY_THRESHOLDS = {
 
 export const recoveryService = {
   async getRecoveryData(userId: string): Promise<RecoveryData[]> {
+    if (!canSyncUserToSupabase(userId)) {
+      return this.generateDefaultRecovery().map((row) => ({ ...row, user_id: userId }));
+    }
+
     const { data, error } = await supabase
       .from('recovery')
       .select('*')
@@ -32,6 +39,8 @@ export const recoveryService = {
   },
 
   async initializeForUser(userId: string): Promise<void> {
+    if (!canSyncUserToSupabase(userId)) return;
+
     const rows = MUSCLE_GROUPS.map((muscle) => ({
       user_id: userId,
       muscle_group: muscle.id,
@@ -105,6 +114,8 @@ export const recoveryService = {
     userId: string,
     muscleVolumes: Record<MuscleGroup, number>
   ): Promise<void> {
+    if (!canSyncUserToSupabase(userId)) return;
+
     const updates = Object.entries(muscleVolumes).map(([muscle, volume]) => {
       const { score, status } = this.calculateRecoveryScore(
         new Date().toISOString(),
@@ -143,37 +154,72 @@ export const recoveryService = {
   },
 };
 
+function filterProgressByPeriod(
+  entries: ProgressEntry[],
+  period: 'week' | 'month' | 'year'
+): ProgressEntry[] {
+  const days = period === 'week' ? 7 : period === 'month' ? 30 : 365;
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+  const start = startDate.toISOString().split('T')[0];
+  return entries.filter((e) => e.date >= start).sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export const progressService = {
-  async getProgress(
-    userId: string,
-    period: 'week' | 'month' | 'year' | 'lifetime' = 'month'
-  ): Promise<ProgressEntry[]> {
-    const days =
-      period === 'week' ? 7 : period === 'month' ? 30 : period === 'year' ? 365 : null;
+  async getProgress(userId: string, period: 'week' | 'month' | 'year' = 'month'): Promise<ProgressEntry[]> {
+    const local = useAppStore
+      .getState()
+      .localProgress.filter((p) => p.user_id === userId);
 
-    let query = supabase.from('progress').select('*').eq('user_id', userId);
-
-    if (days != null) {
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - days);
-      query = query.gte('date', startDate.toISOString().split('T')[0]);
+    if (!canSyncUserToSupabase(userId)) {
+      return filterProgressByPeriod(local, period);
     }
 
-    const { data, error } = await query.order('date', { ascending: true });
+    const days = period === 'week' ? 7 : period === 'month' ? 30 : 365;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
 
-    if (error) return [];
-    return (data as ProgressEntry[]) ?? [];
+    const { data, error } = await supabase
+      .from('progress')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('date', startDate.toISOString().split('T')[0])
+      .order('date', { ascending: true });
+
+    if (error) return filterProgressByPeriod(local, period);
+    const remote = (data as ProgressEntry[]) ?? [];
+    const merged = new Map<string, ProgressEntry>();
+    for (const row of [...local, ...remote]) merged.set(row.date, row);
+    return filterProgressByPeriod([...merged.values()], period);
   },
 
   async logProgress(userId: string, entry: Omit<ProgressEntry, 'id' | 'user_id'>): Promise<ProgressEntry> {
+    const draft: ProgressEntry = {
+      id: `local_${userId}_${entry.date}`,
+      user_id: userId,
+      ...entry,
+    };
+
+    if (!canSyncUserToSupabase(userId)) {
+      useAppStore.getState().addLocalProgress(draft);
+      return draft;
+    }
+
     const newEntry = { ...entry, user_id: userId };
 
     const { data, error } = await supabase.from('progress').insert(newEntry).select().single();
-    if (error) throw error;
-    return data as ProgressEntry;
+    if (error) {
+      useAppStore.getState().addLocalProgress(draft);
+      await outboxService.enqueueProgressLog(userId, entry);
+      return draft;
+    }
+    const saved = data as ProgressEntry;
+    useAppStore.getState().addLocalProgress(saved);
+    return saved;
   },
 
   async getMeasurements(userId: string) {
+    if (!canSyncUserToSupabase(userId)) return [];
     const { data, error } = await supabase
       .from('measurements')
       .select('*')
@@ -182,19 +228,25 @@ export const progressService = {
       .limit(10);
 
     if (error) return [];
-    return data ?? [];
+    return (data as Measurement[]) ?? [];
   },
 
-  async clearProgressData(userId: string): Promise<void> {
-    if (!userId || userId === 'guest' || !isSupabaseConfigured) return;
-
-    const tables = ['workout_sessions', 'workout_plans', 'progress', 'measurements'] as const;
-
-    for (const table of tables) {
-      const { error } = await supabase.from(table).delete().eq('user_id', userId);
-      if (error) throw error;
+  async logMeasurement(
+    userId: string,
+    entry: Omit<Measurement, 'id' | 'user_id'>
+  ): Promise<Measurement> {
+    if (!canSyncUserToSupabase(userId)) {
+      throw new Error('Sign in to sync body measurements.');
     }
-
-    await recoveryService.initializeForUser(userId);
+    const { data, error } = await supabase
+      .from('measurements')
+      .insert({ ...entry, user_id: userId })
+      .select()
+      .single();
+    if (error) {
+      await outboxService.enqueueMeasurementLog(userId, entry);
+      throw new Error('Saved locally; will sync when online.');
+    }
+    return data as Measurement;
   },
 };

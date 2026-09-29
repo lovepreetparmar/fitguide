@@ -25,13 +25,13 @@ export function Input({
   const [isFocused, setIsFocused] = useState(false);
 
   return (
-    <View className="mb-4">
+    <View className="mb-4 w-full self-stretch">
       {label && (
         <Text className="mb-2 text-sm font-medium text-text-secondary">{label}</Text>
       )}
       <View
         className={cn(
-          'flex-row items-center rounded-button border bg-card px-4',
+          'min-h-[52px] w-full flex-row items-center rounded-button border bg-card px-4',
           isFocused ? 'border-primary' : 'border-border',
           error && 'border-error'
         )}

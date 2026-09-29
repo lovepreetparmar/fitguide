@@ -191,6 +191,73 @@ export interface NutritionLog {
   water_ml: number;
 }
 
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+export interface Food {
+  id: string;
+  user_id: string | null;
+  name: string;
+  serving_amount: number;
+  serving_unit: string;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+  is_saved?: boolean;
+  created_at?: string;
+}
+
+export interface MealLog {
+  id: string;
+  user_id: string;
+  date: string;
+  meal_type: MealType;
+  created_at?: string;
+}
+
+export interface MealLogItem {
+  id: string;
+  meal_log_id: string;
+  food_id: string | null;
+  name: string;
+  quantity: number;
+  unit: string;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+  client_item_id?: string | null;
+  meal_type?: MealType;
+}
+
+export interface SavedMealItemTemplate {
+  name: string;
+  food_id?: string | null;
+  quantity: number;
+  unit: string;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+}
+
+export interface SavedMeal {
+  id: string;
+  user_id: string;
+  name: string;
+  items: SavedMealItemTemplate[];
+  created_at?: string;
+}
+
+export interface LocalMealLogItem extends MealLogItem {
+  user_id: string;
+  date: string;
+  meal_type: MealType;
+}
+
 export interface WaterLog {
   id: string;
   user_id: string;
